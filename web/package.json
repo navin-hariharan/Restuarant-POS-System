@@ -1,0 +1,39 @@
+{
+  "name": "pos-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/i18n-keys.mjs && npm run build:app",
+    "build:app": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b --noEmit",
+    "i18n": "node scripts/i18n-keys.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.104.4",
+    "axios": "^1.20.0",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^0.441.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^2.15.4",
+    "sonner": "^1.7.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.19.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.4",
+    "vitest": "^5.0.5"
+  },
+  "author": "Navin Hariharan"
+}

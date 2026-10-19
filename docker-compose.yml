@@ -1,0 +1,52 @@
+# Local run: the app and a MariaDB database.
+#   cp .env.example .env   (set the passwords)
+#   docker compose up -d --build
+# Open http://localhost:8080 . On the first start with an empty database the
+# administrator is ADMIN_EMAIL / ADMIN_PASSWORD (or a generated password shown
+# in `docker compose logs app`).
+# To bring old data: Settings > Database Backups > Upload, then Restore.
+
+services:
+  app:
+    build: .
+    image: restaurant-pos
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      DB_HOST: ${DB_HOST:-pos}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-pos}
+      DB_USERNAME: ${DB_USERNAME:-pos}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      APP_URL: ${APP_URL:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      DB_BACKUPS_LIMIT: ${DB_BACKUPS_LIMIT:-10}
+      MAX_BACKUP_UPLOAD_MB: ${MAX_BACKUP_UPLOAD_MB:-1024}
+    volumes:
+      - app-data:/data
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-pos}
+      MARIADB_USER: ${DB_USERNAME:-pos}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--max-allowed-packet=256M"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - db-data:/var/lib/mysql
+
+volumes:
+  app-data:
+  db-data:

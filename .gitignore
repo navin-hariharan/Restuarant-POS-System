@@ -1,0 +1,7 @@
+/server/target/
+/web/node_modules/
+/web/dist/
+/data/
+*.log
+.env
+.DS_Store
