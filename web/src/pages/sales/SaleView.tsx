@@ -139,7 +139,8 @@ export default function SaleView() {
   const orderTypeKey = sale.order_type ?? keyFromTitle(config.order_types, info.order_type);
   const allowEditChecked = !!config.modes.allow_to_edit_checked_orders;
   const editable = can('pos_portal') && canEditInPos(sale, allowEditChecked);
-  const cancellable = can('pos_portal', 'manage_sales') && !sale.is_cancelled && (!sale.completed_at || allowEditChecked);
+  const cancellable =
+    can('pos_portal', 'manage_sales') && !sale.is_cancelled && (!sale.completed_at || (allowEditChecked && can('remove_sales')));
   const removable = can('remove_sales');
   const tip = Number(sale.tip_amount ?? 0);
   const discount = Number(sale.discount_amount ?? 0);

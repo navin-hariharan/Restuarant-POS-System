@@ -511,12 +511,33 @@ async fn cancel_order(
 
     let mut tx = state.db.begin().await?;
     let sale = lock_sale(&mut tx, sale.i64("id")).await?;
-    // Stock was only taken at checkout, so only a checked-out order gives it back.
-    if cancelling && !sale.bool("is_cancelled") && sale.opt_str("completed_at").is_some() {
-        stock::restore(&mut tx, modes.item_consumption, &items_list(Some(&json_col(&sale, "items"))), now).await?;
+    let completed = sale.opt_str("completed_at").is_some();
+    // A paid sale is only cancelled (or restored) by someone who may remove sales.
+    if completed {
+        user.require(&["remove_sales"])?;
     }
-    if sale.str("order_type") == "dining" {
-        set_table_booked(&mut tx, sale.opt_i64("table_id"), false, now).await?;
+    let change = cancel_change(sale.bool("is_cancelled"), cancelling);
+    let dining = sale.str("order_type") == "dining";
+    // Stock is held exactly once while a checked-out sale is not cancelled.
+    let items = items_list(Some(&json_col(&sale, "items")));
+    match change {
+        CancelChange::Cancel => {
+            if completed {
+                stock::restore(&mut tx, modes.item_consumption, &items, now).await?;
+            }
+            if dining {
+                set_table_booked(&mut tx, sale.opt_i64("table_id"), false, now).await?;
+            }
+        }
+        CancelChange::Restore => {
+            if completed {
+                stock::deduct(&mut tx, modes.item_consumption, &items, now).await?;
+            } else if dining {
+                // An open order holds its table again, as a new one would.
+                set_table_booked(&mut tx, sale.opt_i64("table_id"), true, now).await?;
+            }
+        }
+        CancelChange::None => {}
     }
     let cols = data.columns(&mut tx).await?;
     common::update_sale(&mut tx, sale.i64("id"), cols, now).await?;
@@ -524,6 +545,22 @@ async fn cancel_order(
     activity::log(&state, &user, &headers, &state.t("Order information cancelled successfully").await, Some(&sale.str("tracking"))).await;
     notify::order_event(&state, sale.i64("id"), OrderEvent::Cancelled);
     Ok(common::reply(json!({ "message": state.t("Cancelled successfully").await })))
+}
+
+#[derive(Debug, PartialEq)]
+enum CancelChange {
+    Cancel,
+    Restore,
+    None,
+}
+
+/// What a cancel request does to a sale that is (or is not) cancelled now.
+fn cancel_change(was_cancelled: bool, cancelling: bool) -> CancelChange {
+    match (was_cancelled, cancelling) {
+        (false, true) => CancelChange::Cancel,
+        (true, false) => CancelChange::Restore,
+        _ => CancelChange::None,
+    }
 }
 
 /// PosBillingSaleOrderResource: an open order loaded back into the till.
@@ -725,4 +762,17 @@ async fn reservation_checkout(
     tx.commit().await?;
     activity::log(&state, &user, &headers, &state.t("Guest room reservation updated successfully").await, Some(&r.str("tracking"))).await;
     Ok(common::reply(json!({ "message": state.t("Order information updated successfully").await })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_transitions() {
+        assert_eq!(cancel_change(false, true), CancelChange::Cancel);
+        assert_eq!(cancel_change(true, false), CancelChange::Restore);
+        assert_eq!(cancel_change(true, true), CancelChange::None);
+        assert_eq!(cancel_change(false, false), CancelChange::None);
+    }
 }

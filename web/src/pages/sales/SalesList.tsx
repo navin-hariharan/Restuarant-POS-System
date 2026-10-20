@@ -282,7 +282,7 @@ export default function SalesList() {
                   <MenuItem icon={<Printer className="h-4 w-4" />} onClick={() => { close(); nav(`/print/sale/${r.uuid}`); }}>
                     {t('Print')}
                   </MenuItem>
-                  {canCancel && !r.is_cancelled && (!r.completed_at || allowEditChecked) && (
+                  {canCancel && !r.is_cancelled && (!r.completed_at || (allowEditChecked && canRemove)) && (
                     <MenuItem danger icon={<Ban className="h-4 w-4" />} onClick={() => { close(); setCancelling(r); }}>
                       {t('Cancel order')}
                     </MenuItem>
