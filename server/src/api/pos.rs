@@ -7,8 +7,7 @@ pub mod php;
 
 use self::common::{
     bool_col, by_ids, d, ids_of, items_list, json_col, load_pos_customers, lock_sale, opt_pos_pickup, opt_pos_table, pos_modifier,
-    pos_payment_method, pos_pickup, pos_table, pos_tax, sale_by_uuid, set_table_booked, tax_resource, tx_exec, tx_row, Row, SaleData,
-    TaxRule,
+    pos_payment_method, pos_pickup, pos_tax, sale_by_uuid, set_table_booked, tax_resource, tx_exec, tx_row, Row, SaleData, TaxRule,
 };
 use crate::{
     activity,
@@ -119,9 +118,12 @@ async fn payment_methods(State(state): State<AppState>, user: AuthUser) -> AppRe
     Ok(common::reply(Value::Array(rows.iter().map(pos_payment_method).collect())))
 }
 
+/// Tables for the till and the digital menu. Also shown to guests, so only
+/// whether a table is open, never its PIN or counters.
 pub async fn table_list(state: &AppState) -> AppResult<Vec<Value>> {
+    let s = state.settings.get().await;
     let rows = Sql::new("SELECT * FROM service_tables ORDER BY id").fetch_all(&state.db).await?;
-    Ok(rows.iter().map(pos_table).collect())
+    Ok(rows.iter().map(|r| common::listed_table(r, super::seating::row_is_open(&s, r))).collect())
 }
 
 async fn service_tables(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -529,6 +531,7 @@ async fn checkout(
     data.set("biller_id", Value::from(user.id));
     if sale.str("order_type") == "dining" {
         set_table_booked(&mut tx, sale.opt_i64("table_id"), false, now).await?;
+        super::seating::close_after(&mut tx, &sale).await?;
     }
     let cols = data.columns(&mut tx).await?;
     common::update_sale(&mut tx, sale.i64("id"), cols, now).await?;
@@ -580,6 +583,7 @@ async fn cancel_order(
             }
             if dining {
                 set_table_booked(&mut tx, sale.opt_i64("table_id"), false, now).await?;
+                super::seating::close_after(&mut tx, &sale).await?;
             }
         }
         CancelChange::Restore => {

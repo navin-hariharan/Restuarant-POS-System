@@ -55,6 +55,10 @@ impl AppError {
         e.add(field, msg);
         Self::Validation(e)
     }
+    /// 429 with a message for the user
+    pub fn too_many(msg: impl Into<String>) -> Self {
+        Self::Status(StatusCode::TOO_MANY_REQUESTS, msg.into())
+    }
     /// 422 without field errors
     pub fn unprocessable(msg: impl Into<String>) -> Self {
         Self::Status(StatusCode::UNPROCESSABLE_ENTITY, msg.into())

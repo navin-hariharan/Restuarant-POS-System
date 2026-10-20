@@ -30,6 +30,7 @@ pub mod reports;
 pub mod roles;
 pub mod rooms;
 pub mod sales;
+pub mod seating;
 pub mod service_tables;
 pub mod settings;
 pub mod system;
@@ -60,6 +61,7 @@ pub fn router() -> Router<AppState> {
         .merge(customers::router())
         .merge(pos::router())
         .merge(sales::router())
+        .merge(seating::router())
         .merge(digital_menu::router())
         .merge(print::router())
         .merge(cashbooks::router())

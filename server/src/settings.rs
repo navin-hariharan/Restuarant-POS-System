@@ -115,11 +115,20 @@ impl Settings {
             autoclose_shipping_model: self.flag("autoclose_shipping_model"),
             taxation: self.flag("taxation"),
             digital_menu: self.flag("digital_menu"),
+            digital_menu_pin: self.flag("digital_menu_require_pin"),
             allow_expiry_date: self.flag("allow_expiry_date"),
             send_notification: self.flag("advance_send_notification"),
             wa_status: self.flag("wa_status"),
             sms_status: self.flag("sms_status"),
             display_logo: self.flag("display_logo"),
+        }
+    }
+
+    /// Hours a seating PIN stays valid after the table was opened.
+    pub fn seating_pin_max_hours(&self) -> i64 {
+        match self.row.i64("seating_pin_max_hours") {
+            h if h > 0 => h,
+            _ => 8,
         }
     }
 
@@ -158,6 +167,8 @@ pub struct Modes {
     pub autoclose_shipping_model: bool,
     pub taxation: bool,
     pub digital_menu: bool,
+    /// Digital menu orders need the table's seating PIN.
+    pub digital_menu_pin: bool,
     pub allow_expiry_date: bool,
     pub send_notification: bool,
     pub wa_status: bool,

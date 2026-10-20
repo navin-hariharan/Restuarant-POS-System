@@ -1,15 +1,16 @@
 import clsx from 'clsx';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { BedDouble, Check, LogIn, MapPin, Plus, Store, Trash2, UserPlus, Users } from 'lucide-react';
+import { BedDouble, Check, KeyRound, LogIn, MapPin, Plus, Store, Trash2, UserPlus, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { api, fieldErrors } from '@/lib/api';
 import { Badge, Button, EmptyState, Input, Modal, SearchInput, Skeleton, Spinner, Textarea, useDebounced } from '@/components/ui';
-import { useAuth, useT } from '@/providers/AppProviders';
+import { useAuth, useConfig, useT } from '@/providers/AppProviders';
 import { slimCustomer, slimReservation } from './draft';
 import { posKeys, useCustomerSearch, usePickupPoints, useReservations, useServiceTables } from './queries';
 import type { Customer, PickupPoint, Reservation, ServiceTable } from './types';
 import { truthy } from '@/lib/cart';
+import { SeatingDialog } from './SeatingDialog';
 
 function OptionTile({ selected, disabled, onClick, children, className }: { selected?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode; className?: string }) {
   return (
@@ -54,8 +55,13 @@ export function TablePicker({
   onChange: (t: ServiceTable | null) => void;
 }) {
   const t = useT();
+  const { config } = useConfig();
+  const { can } = useAuth();
   const tables = useServiceTables(open);
+  const [seating, setSeating] = useState<ServiceTable | null>(null);
+  const pins = !!config.modes.digital_menu && !!config.modes.digital_menu_pin && (can('pos_portal') || can('manage_service_tables'));
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -76,7 +82,7 @@ export function TablePicker({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {tables.data.map((tb) => {
             const booked = truthy(tb.is_booked) && tb.id !== ownTableId;
-            return (
+            const tile = (
               <OptionTile
                 key={tb.id}
                 selected={value?.id === tb.id}
@@ -87,13 +93,27 @@ export function TablePicker({
                 }}
               >
                 <span className="font-semibold">{tb.title}</span>
-                <Badge tone={booked ? 'amber' : 'green'}>{booked ? t('Booked') : t('Available')}</Badge>
+                <span className="flex flex-wrap gap-1">
+                  <Badge tone={booked ? 'amber' : 'green'}>{booked ? t('Booked') : t('Available')}</Badge>
+                  {pins && tb.is_open && <Badge tone="blue">{t('Open')}</Badge>}
+                </span>
               </OptionTile>
+            );
+            if (!pins) return tile;
+            return (
+              <div key={tb.id} className="flex flex-col gap-1">
+                {tile}
+                <button type="button" className="btn-ghost btn-sm justify-center text-xs" onClick={() => setSeating(tb)}>
+                  <KeyRound className="h-3.5 w-3.5" /> {tb.is_open ? t('Table code') : t('Open table')}
+                </button>
+              </div>
             );
           })}
         </div>
       )}
     </Modal>
+    <SeatingDialog table={seating} onClose={() => setSeating(null)} />
+    </>
   );
 }
 

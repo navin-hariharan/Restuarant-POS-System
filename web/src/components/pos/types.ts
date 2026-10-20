@@ -2,7 +2,7 @@ import type { CartItem, TaxSetup } from '@/lib/cart';
 
 export type Category = { id: number; name: string; image?: string };
 
-export type ServiceTable = { id: number; title: string; is_booked?: boolean | number };
+export type ServiceTable = { id: number; title: string; is_booked?: boolean | number; is_open?: boolean };
 
 export type PickupPoint = {
   id: number;

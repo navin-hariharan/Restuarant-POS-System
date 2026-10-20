@@ -7,6 +7,7 @@ use super::pos::{
     common::{self, catalogue, fk_id, money, order_tax, set_table_booked, totals, tx_exec, tx_row, Catalogue, SaleData, TaxRule},
     missing, php,
 };
+use super::seating::{self, PinCheck};
 use crate::{
     db::RowExt,
     error::{AppError, AppResult, Errors},
@@ -18,6 +19,7 @@ use crate::{
 };
 use axum::{
     extract::State,
+    http::HeaderMap,
     routing::{get, post},
     Json, Router,
 };
@@ -197,7 +199,7 @@ fn price_line(state: &AppState, s: &Settings, cat: &Catalogue, l: &Value, idx: u
     Some(Value::Object(line))
 }
 
-async fn collect_order(State(state): State<AppState>, input: Input) -> AppResult<Json<Value>> {
+async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
     let s = state.settings.get().await;
     let modes = s.modes();
     if !modes.digital_menu {
@@ -247,7 +249,7 @@ async fn collect_order(State(state): State<AppState>, input: Input) -> AppResult
     };
     let table_id = input.get("table_id").cloned();
     match &table_id {
-        None if !modes.table_is_option => errors.add("table_id", "Service table is required for dinning order"),
+        None if !modes.table_is_option || modes.digital_menu_pin => errors.add("table_id", "Service table is required for dinning order"),
         None => {}
         Some(v) => {
             let found = match fk_id(v) {
@@ -260,6 +262,10 @@ async fn collect_order(State(state): State<AppState>, input: Input) -> AppResult
         }
     }
     errors.check()?;
+    let pin = input.opt_str("pin");
+    if modes.digital_menu_pin && pin.is_some() && !state.limiter.allow(&format!("pin:{}", crate::activity::client_ip(&headers)), 20) {
+        return Err(AppError::too_many(tr!("Too many attempts. Please wait a minute and try again.")));
+    }
 
     // Price every line from the catalogue.
     let cat = catalogue(&state, &lines).await?;
@@ -281,6 +287,14 @@ async fn collect_order(State(state): State<AppState>, input: Input) -> AppResult
     let table = table_id.as_ref().and_then(fk_id);
 
     let mut tx = state.db.begin().await?;
+    // The table's PIN, checked with its row locked until the order is in.
+    if let (true, Some(table)) = (modes.digital_menu_pin, table) {
+        let check = seating::check_pin(&mut tx, &s, table, pin.as_deref()).await?;
+        if check != PinCheck::Ok {
+            tx.commit().await?;
+            return Err(check.error());
+        }
+    }
     // Reuse a customer only on a real e-mail / phone match.
     let mut customer: Option<i64> = None;
     if email.is_some() || phone.is_some() {

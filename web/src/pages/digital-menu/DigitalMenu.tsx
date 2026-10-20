@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, ImageOff, LayoutGrid, Plus, ShoppingBag, Trash2, Utensils } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, ImageOff, LayoutGrid, Lock, Plus, ShoppingBag, Trash2, Utensils } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -15,7 +15,26 @@ import { checkedModifiers } from '@/components/sales/saleUtils';
 import { buildLine, hasText, ProductSheet, QtyStepper } from './ProductSheet';
 
 type Category = { id: number; name: string; image?: string };
-type Table = { id: number; title: string; is_booked?: boolean };
+type Table = { id: number; title: string; is_booked?: boolean; is_open?: boolean };
+
+/** Per-tab memory (the table code, the e-mail token): gone when the tab closes. */
+const session = {
+  get(key: string): string {
+    try {
+      return sessionStorage.getItem(key) ?? '';
+    } catch {
+      return '';
+    }
+  },
+  set(key: string, value: string) {
+    try {
+      if (value) sessionStorage.setItem(key, value);
+      else sessionStorage.removeItem(key);
+    } catch {
+      /* storage blocked: the guest types it again */
+    }
+  },
+};
 type Customer = { name: string; phone: string; email: string };
 type Placed = { tracking: string | number; at: number; total: number; items: number };
 
@@ -48,6 +67,8 @@ export default function DigitalMenu() {
   const isReady = !!config.modes.bypass_kitchen_bar;
   const orderTax = normalizeTax(config.tax_setup);
   const cartKey = `dm_cart_${tableId}`;
+  const pinRequired = !!config.modes.digital_menu_pin;
+  const pinKey = `dm_pin_${tableId}`;
 
   const [search, setSearch] = useState('');
   const debounced = useDebounced(search, 350);
@@ -57,6 +78,7 @@ export default function DigitalMenu() {
   const [cartOpen, setCartOpen] = useState(false);
   const [customer, setCustomer] = useState<Customer>(() => storage.get<Customer>('dm_customer', { name: '', phone: '', email: '' }));
   const [chefNote, setChefNote] = useState('');
+  const [pin, setPin] = useState(() => session.get(pinKey));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [placing, setPlacing] = useState(false);
   const [placed, setPlaced] = useState<Placed | null>(null);
@@ -97,6 +119,12 @@ export default function DigitalMenu() {
   const productList = useMemo(() => (products.data?.pages ?? []).flatMap((p) => p.items).map(normalizeProduct), [products.data]);
 
   const table = tables.data?.find((x) => String(x.id) === String(tableId));
+  const closed = pinRequired && !!table && !table.is_open;
+  // Staff may open the table while the guest is browsing.
+  useEffect(() => {
+    if (cartOpen && pinRequired) tables.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartOpen, pinRequired]);
   const totals = useMemo(
     () => orderTotals({ items: cart, isItemBasedTaxation: itemBasedTax, tax: orderTax, discountRate: 0, isDiscountInPercentage: false }),
     [cart, itemBasedTax, orderTax],
@@ -142,8 +170,9 @@ export default function DigitalMenu() {
     const errs: Record<string, string> = {};
     if (!customer.name.trim()) errs.name = t('Name is required');
     if (customer.email && !/^\S+@\S+\.\S+$/.test(customer.email)) errs.email = t('Enter a valid email address');
+    if (pinRequired && !/^\d{6}$/.test(pin.trim())) errs.pin = t('Enter the 6-digit table code');
     setErrors(errs);
-    if (Object.keys(errs).length || !cart.length) return;
+    if (Object.keys(errs).length || !cart.length || closed) return;
     setPlacing(true);
     const payload = {
       order_type: 'dining',
@@ -151,6 +180,7 @@ export default function DigitalMenu() {
       name: customer.name.trim(),
       phone: customer.phone.trim() || null,
       email: customer.email.trim() || null,
+      ...(pinRequired ? { pin: pin.trim() } : {}),
       items: cart,
       tax: orderTax ?? config.tax_setup,
       tax_amount: round2(totals.taxAmount),
@@ -174,6 +204,7 @@ export default function DigitalMenu() {
       const res = await api.post<{ message: string; order: string | number }>('digital-menu/order-collect', payload);
       const info: Placed = { tracking: res.data.order, at: Date.now(), total: totals.totalAmount, items: totals.cartTotalItems };
       storage.set('dm_customer', customer);
+      if (pinRequired) session.set(pinKey, pin.trim());
       storage.set(`dm_last_order_${tableId}`, info);
       setLastOrder(info);
       setPlaced(info);
@@ -182,7 +213,13 @@ export default function DigitalMenu() {
       setCartOpen(false);
       window.scrollTo({ top: 0 });
     } catch (e) {
-      setErrors(fieldErrors(e));
+      const errs = fieldErrors(e);
+      if (errs.pin) {
+        session.set(pinKey, '');
+        setPin('');
+        tables.refetch();
+      }
+      setErrors(errs);
     } finally {
       setPlacing(false);
     }
@@ -271,6 +308,13 @@ export default function DigitalMenu() {
               ))}
         </div>
       </div>
+
+      {closed && (
+        <div className="mx-4 mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200" role="status">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+          {t('This table has not been opened yet. Please ask a member of staff.')}
+        </div>
+      )}
 
       {lastOrder && Date.now() - lastOrder.at < 6 * 3600_000 && (
         <div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
@@ -394,7 +438,8 @@ export default function DigitalMenu() {
                   <dd className="tabular-nums">{money(totals.totalAmount)}</dd>
                 </div>
               </dl>
-              <button className="btn-primary h-12 w-full text-base" onClick={placeOrder} disabled={placing}>
+              {closed && <p className="text-sm text-amber-700 dark:text-amber-400">{t('This table has not been opened yet. Please ask a member of staff.')}</p>}
+              <button className="btn-primary h-12 w-full text-base" onClick={placeOrder} disabled={placing || closed}>
                 {placing && <Spinner />}
                 {t('Place order')} · {money(totals.totalAmount)}
               </button>
@@ -476,6 +521,22 @@ export default function DigitalMenu() {
                   onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
                 />
               </div>
+              {pinRequired && (
+                <Input
+                  label={t('Table code')}
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  className="font-mono tracking-[0.3em]"
+                  value={pin}
+                  error={errors.pin}
+                  help={t('Ask your server for the table code')}
+                  disabled={closed}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                />
+              )}
               <Textarea label={t('Note for chef')} rows={2} value={chefNote} onChange={(e) => setChefNote(e.target.value)} placeholder={t('Allergies or anything the kitchen should know')} />
               {errors.table_id && <p className="error-text">{errors.table_id}</p>}
               <button type="submit" className="sr-only">

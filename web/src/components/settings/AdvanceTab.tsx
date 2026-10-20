@@ -1,5 +1,5 @@
 import { Info } from 'lucide-react';
-import { Switch } from '@/components/ui';
+import { Input, Switch } from '@/components/ui';
 import { useT } from '@/providers/AppProviders';
 import { SettingsPanel, SettingsSection, ToggleList } from './SettingsPanel';
 import { bool, useSettingsForm } from './useSettingsForm';
@@ -37,6 +37,17 @@ const GROUPS: { title: string; description: string; flags: { key: string; label:
     ],
   },
   {
+    title: 'Digital menu ordering',
+    description: 'What guests need before an order from a table QR code is accepted.',
+    flags: [
+      {
+        key: 'digital_menu_require_pin',
+        label: 'Require a table code',
+        help: 'Staff open the table and give the guests a 6-digit code, which they enter to order. Closing or paying the table ends the code.',
+      },
+    ],
+  },
+  {
     title: 'Tax',
     description: 'How tax is applied to orders.',
     flags: [
@@ -61,9 +72,9 @@ const ALL_KEYS = GROUPS.flatMap((g) => g.flags.map((f) => f.key));
 
 export default function AdvanceTab() {
   const t = useT();
-  const form = useSettingsForm<Record<string, boolean>>({
+  const form = useSettingsForm<Record<string, boolean | number>>({
     endpoint: 'admin/setting/advance-config',
-    select: (d) => Object.fromEntries(ALL_KEYS.map((k) => [k, bool(d?.[k])])),
+    select: (d) => ({ ...Object.fromEntries(ALL_KEYS.map((k) => [k, bool(d?.[k])])), seating_pin_max_hours: Number(d?.seating_pin_max_hours ?? 8) || 8 }),
   });
   const { values: v, set, errors: e } = form;
   return (
@@ -81,6 +92,22 @@ export default function AdvanceTab() {
                 {e[f.key] && <p className="error-text">{e[f.key]}</p>}
               </div>
             ))}
+            {g.title === 'Digital menu ordering' && (
+              <div className="p-4">
+                <Input
+                  label={t('Table code valid for (hours)')}
+                  type="number"
+                  min={1}
+                  max={72}
+                  step={1}
+                  wrapperClassName="max-w-xs"
+                  help={t('An older code stops working, as if the table had been closed.')}
+                  value={String(v.seating_pin_max_hours ?? 8)}
+                  error={e.seating_pin_max_hours}
+                  onChange={(ev) => set('seating_pin_max_hours', Number(ev.target.value))}
+                />
+              </div>
+            )}
           </ToggleList>
         </SettingsSection>
       ))}

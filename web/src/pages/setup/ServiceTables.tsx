@@ -1,12 +1,13 @@
-import { Copy, ExternalLink, Printer, QrCode as QrIcon } from 'lucide-react';
+import { Copy, ExternalLink, KeyRound, Printer, QrCode as QrIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { CrudPage } from '@/components/crud/CrudPage';
 import { useAuth, useConfig, useT } from '@/providers/AppProviders';
-import { Button, Modal } from '@/components/ui';
+import { Badge, Button, Modal } from '@/components/ui';
 import { QrCode } from '@/components/catalog/QrCode';
+import { SeatingDialog } from '@/components/pos/SeatingDialog';
 
-type TableRow = { id: number; title: string; digital_menu: string; created_at: string; updated_at: string };
+type TableRow = { id: number; title: string; digital_menu: string; is_open?: boolean; created_at: string; updated_at: string };
 
 /** The resource appends `&stamp=<now>`; drop it so printed codes stay stable. */
 const menuLink = (url: string) => {
@@ -86,7 +87,9 @@ export default function ServiceTables() {
   const { can } = useAuth();
   const allowed = can('manage_service_tables');
   const [qr, setQr] = useState<TableRow | null>(null);
+  const [seating, setSeating] = useState<TableRow | null>(null);
   const dm = config.modes.digital_menu;
+  const pins = dm && !!config.modes.digital_menu_pin;
 
   return (
     <>
@@ -103,7 +106,31 @@ export default function ServiceTables() {
         toForm={(r) => ({ id: r.id, title: r.title ?? '' })}
         fields={[{ name: 'title', label: 'Title', required: true, full: true }]}
         columns={[
-          { key: 'title', header: t('Title'), cell: (r) => <span className="font-medium">{r.title}</span> },
+          {
+            key: 'title',
+            header: t('Title'),
+            cell: (r) => (
+              <span className="flex items-center gap-2">
+                <span className="font-medium">{r.title}</span>
+                {pins && r.is_open && <Badge tone="blue">{t('Open')}</Badge>}
+              </span>
+            ),
+          },
+          ...(pins
+            ? [
+                {
+                  key: 'seating',
+                  header: t('Table code'),
+                  cell: (r: TableRow) => (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant={r.is_open ? 'secondary' : 'primary'} icon={<KeyRound className="h-4 w-4" />} onClick={() => setSeating(r)}>
+                        {r.is_open ? t('Table code') : t('Open table')}
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
           ...(dm
             ? [
                 {
@@ -142,6 +169,7 @@ export default function ServiceTables() {
         ]}
       />
       <QrModal table={qr} onClose={() => setQr(null)} />
+      <SeatingDialog table={seating} onClose={() => setSeating(null)} />
     </>
   );
 }

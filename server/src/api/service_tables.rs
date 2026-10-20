@@ -36,6 +36,7 @@ pub fn table_json(state: &AppState, s: &Settings, r: &Row) -> Value {
         "id": r.get("id"),
         "title": r.get("title"),
         "digital_menu": state.asset_url(&format!("dm?t={}&stamp={stamp}", r.i64("id"))),
+        "is_open": super::seating::row_is_open(s, r),
         "created_at": records::date(s, r, "created_at"),
         "updated_at": records::date(s, r, "updated_at"),
     })

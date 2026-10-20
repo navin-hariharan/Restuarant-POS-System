@@ -20,6 +20,8 @@ export type Modes = {
   autoclose_shipping_model: boolean;
   taxation: boolean;
   digital_menu: boolean;
+  /** Digital menu orders need the table's seating PIN. */
+  digital_menu_pin?: boolean;
   allow_expiry_date: boolean;
 };
 

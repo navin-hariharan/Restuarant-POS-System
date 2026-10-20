@@ -421,6 +421,10 @@ CREATE TABLE `service_tables` (
   `is_booked` tinyint(1) NOT NULL DEFAULT 0,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
+  `seating_pin` varchar(6) DEFAULT NULL,
+  `seating_started_at` timestamp NULL DEFAULT NULL,
+  `pin_failed_attempts` int(10) unsigned NOT NULL DEFAULT 0,
+  `pin_locked_until` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -515,6 +519,8 @@ CREATE TABLE `settings` (
   `taxation` tinyint(1) NOT NULL DEFAULT 1,
   `digital_menu` tinyint(1) NOT NULL DEFAULT 1,
   `allow_expiry_date` tinyint(1) NOT NULL DEFAULT 0,
+  `digital_menu_require_pin` tinyint(1) NOT NULL DEFAULT 1,
+  `seating_pin_max_hours` int(10) unsigned NOT NULL DEFAULT 8,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

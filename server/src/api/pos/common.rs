@@ -98,6 +98,14 @@ pub fn pos_table(row: &Row) -> Value {
     json!({ "id": row.val("id"), "title": row.val("title"), "is_booked": bool_col(row, "is_booked") })
 }
 
+/// A table in the till's picker and on the digital menu: the POS fields plus
+/// whether it is open for ordering. Never the PIN or its counters.
+pub fn listed_table(row: &Row, is_open: bool) -> Value {
+    let mut v = pos_table(row);
+    v["is_open"] = Value::Bool(is_open);
+    v
+}
+
 pub fn opt_pos_table(row: Option<&Row>) -> Value {
     row.map(pos_table).unwrap_or(Value::Null)
 }

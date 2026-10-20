@@ -38,7 +38,7 @@ const S = '"((?:\\\\.|[^"\\\\])*)"';
 const rsCalls = [
   new RegExp(`\\.tp?\\(\\s*${S}`, 'g'),
   new RegExp(`\\btr!\\(\\s*${S}`, 'g'),
-  new RegExp(`AppError::(?:bad_request|forbidden|not_acceptable|conflict|unprocessable)\\(\\s*${S}`, 'g'),
+  new RegExp(`AppError::(?:bad_request|forbidden|not_acceptable|conflict|unprocessable|too_many)\\(\\s*${S}`, 'g'),
   new RegExp(`AppError::field\\([^,]+,\\s*${S}`, 'g'),
   new RegExp(`\\.add\\(\\s*"[^"]*",\\s*${S}`, 'g'),
 ];

@@ -372,9 +372,13 @@ async fn update(
     common::update_sale(&mut tx, sale.i64("id"), cols, now).await?;
     tx_exec(&mut tx, "DELETE FROM sale_items WHERE sale_id = ?", vec![sale.i64("id").into()]).await?;
     common::create_sale_items(&state, &mut tx, sale.i64("id"), &items, now).await?;
+    let table = if data.has("table_id") { data.id("table_id") } else { sale.opt_i64("table_id") };
     if dining {
-        let table = if data.has("table_id") { data.id("table_id") } else { sale.opt_i64("table_id") };
         set_table_booked(&mut tx, table, true, now).await?;
+    }
+    // The order left its table: the table closes when nothing else is open on it.
+    if current_table.is_some() && (!dining || table != current_table) {
+        super::seating::close_after(&mut tx, &sale).await?;
     }
     tx.commit().await?;
     activity::log(&state, &user, &headers, &state.t("Sale order updated successfully").await, Some(&sale.str("tracking"))).await;
@@ -386,6 +390,7 @@ async fn update(
 async fn remove_sale(conn: &mut sqlx::MySqlConnection, sale: &Row, consumption: bool, now: chrono::NaiveDateTime) -> AppResult<()> {
     if sale.str("order_type") == "dining" {
         set_table_booked(conn, sale.opt_i64("table_id"), false, now).await?;
+        super::seating::close_after(conn, sale).await?;
     }
     if sale.opt_str("completed_at").is_some() && !sale.bool("is_cancelled") {
         stock::restore(conn, consumption, &items_list(Some(&json_col(sale, "items"))), now).await?;

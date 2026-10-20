@@ -124,6 +124,7 @@ async fn app_config(State(state): State<AppState>, headers: HeaderMap) -> Json<V
         "autoclose_shipping_model": m.autoclose_shipping_model,
         "taxation": m.taxation,
         "digital_menu": m.digital_menu,
+        "digital_menu_pin": m.digital_menu_pin,
         "allow_expiry_date": m.allow_expiry_date,
         "room_reservations_enabled": m.room_reservations,
     });

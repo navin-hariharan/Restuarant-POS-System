@@ -93,6 +93,28 @@ async fn tables(db: &Db) -> anyhow::Result<Vec<String>> {
     Ok(rows.iter().filter_map(|r| r.try_get::<String, _>(0).ok()).collect())
 }
 
+/// Columns added after the baseline: (table, column, definition). Added when
+/// missing (an older database, or a backup from before they existed); older
+/// releases reading this database ignore them.
+const COLUMNS: &[(&str, &str, &str)] = &[
+    ("service_tables", "seating_pin", "varchar(6) NULL DEFAULT NULL"),
+    ("service_tables", "seating_started_at", "timestamp NULL DEFAULT NULL"),
+    ("service_tables", "pin_failed_attempts", "int(10) unsigned NOT NULL DEFAULT 0"),
+    ("service_tables", "pin_locked_until", "timestamp NULL DEFAULT NULL"),
+    ("settings", "digital_menu_require_pin", "tinyint(1) NOT NULL DEFAULT 1"),
+    ("settings", "seating_pin_max_hours", "int(10) unsigned NOT NULL DEFAULT 8"),
+];
+
+async fn ensure_columns(db: &Db) -> anyhow::Result<()> {
+    for (table, column, definition) in COLUMNS {
+        if !has_column(db, table, column).await? {
+            sqlx::query(&format!("ALTER TABLE `{table}` ADD COLUMN `{column}` {definition}")).execute(db).await?;
+            tracing::info!(table = %table, column = %column, "added column");
+        }
+    }
+    Ok(())
+}
+
 async fn has_column(db: &Db, table: &str, column: &str) -> anyhow::Result<bool> {
     let n: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
@@ -184,6 +206,7 @@ async fn run_locked(db: &Db, cfg: &Config) -> anyhow::Result<Report> {
         report.migrated.push(name.to_string());
     }
 
+    ensure_columns(db).await?;
     ensure_indexes(db).await?;
 
     let settings_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM settings").fetch_one(db).await?;
