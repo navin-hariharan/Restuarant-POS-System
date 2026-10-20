@@ -221,18 +221,35 @@ async fn update(
     let id = row.i64("id");
     check_fields(&state, &input, Some(id)).await?;
     let name = input.string("name");
+    let status = rules::bool_value(&input.val("status"));
+    let role_id = input.string("role_id");
     let now = state.settings.get().await.now();
+    let mut tx = state.db.begin().await?;
     sqlx::query("UPDATE users SET name = ?, email = ?, status = ?, role_id = ?, updated_at = ? WHERE id = ?")
         .bind(&name)
         .bind(input.string("email"))
-        .bind(rules::bool_value(&input.val("status")))
-        .bind(input.string("role_id"))
+        .bind(status)
+        .bind(&role_id)
         .bind(now)
         .bind(id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
+    // Deactivating the user or changing their role signs them out everywhere
+    if ends_sessions(&row, status, &role_id) {
+        sqlx::query("DELETE FROM personal_access_tokens WHERE tokenable_type = ? AND tokenable_id = ?")
+            .bind(crate::auth::TOKENABLE_USER)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
     crate::activity::log(&state, &user, &headers, &state.t("User updated successfully").await, Some(&name)).await;
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
+}
+
+/// Whether saving the edit form must end the user's open sessions.
+fn ends_sessions(old: &Map<String, Value>, status: bool, role_id: &str) -> bool {
+    !status || role_id.trim().parse::<i64>().ok() != Some(old.i64("role_id"))
 }
 
 async fn destroy(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>) -> AppResult<Json<Value>> {
@@ -280,4 +297,18 @@ async fn user_roles(State(state): State<AppState>, user: AuthUser) -> AppResult<
     user.require(PERM)?;
     let rows = Sql::new("SELECT * FROM user_roles").fetch_all(&state.db).await?;
     Ok(Json(Value::Array(super::roles::role_list(&state, &rows).await?)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sessions_end_on_deactivation_or_role_change() {
+        let old: Map<String, Value> = serde_json::from_value(json!({ "role_id": 3, "status": 1 })).unwrap();
+        assert!(!ends_sessions(&old, true, "3"));
+        assert!(ends_sessions(&old, false, "3"));
+        assert!(ends_sessions(&old, true, "4"));
+        assert!(ends_sessions(&old, true, ""));
+    }
 }

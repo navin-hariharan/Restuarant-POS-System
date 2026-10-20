@@ -98,6 +98,10 @@ pub async fn resolve_token(state: &AppState, token: &str) -> AppResult<Option<Au
     let user_row = sqlx::query("SELECT * FROM users WHERE id = ?").bind(t.i64("tokenable_id")).fetch_optional(&state.db).await?;
     let Some(user_row) = user_row else { return Ok(None) };
     let user = row_json(&user_row);
+    // A deactivated account's sessions stop working at once
+    if user.i64("status") != 1 {
+        return Ok(None);
+    }
     let role_id = user.i64("role_id");
     let role = sqlx::query("SELECT * FROM user_roles WHERE id = ?")
         .bind(role_id)

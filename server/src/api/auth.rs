@@ -427,6 +427,9 @@ async fn reset(State(state): State<AppState>, headers: HeaderMap, input: Input) 
     let Some(user) = user else {
         return Err(AppError::not_acceptable("The email entered is not registered"));
     };
+    if user.i64("status") != 1 {
+        return Err(AppError::not_acceptable("The user is deactivated"));
+    }
     let id = user.i64("id");
     let hash = crate::auth::hash_password(&password)?;
     let now = s.now();
