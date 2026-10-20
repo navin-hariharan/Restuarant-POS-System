@@ -390,15 +390,18 @@ function MiniStat({
   return (
     <div className="card flex items-center gap-3 p-3">
       <span className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{icon}</span>
-      <div className="min-w-0">
-        <p className="text-xs leading-tight text-slate-500 dark:text-slate-400">{label}</p>
+      {/* The change sits on the label row so the amount gets the full width. */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate text-xs leading-tight text-slate-500 dark:text-slate-400">{label}</p>
+          {delta !== undefined && !loading && (
+            <span className={`shrink-0 text-xs font-medium tabular-nums ${good ? 'text-emerald-600 dark:text-emerald-400' : bad ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
+              {delta === null ? t('New') : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%`}
+            </span>
+          )}
+        </div>
         {loading ? <Skeleton className="mt-1 h-5 w-20" /> : <p className="font-semibold tabular-nums wrap-anywhere">{value}</p>}
       </div>
-      {delta !== undefined && !loading && (
-        <span className={`ms-auto text-xs font-medium tabular-nums ${good ? 'text-emerald-600 dark:text-emerald-400' : bad ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
-          {delta === null ? t('New') : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%`}
-        </span>
-      )}
     </div>
   );
 }

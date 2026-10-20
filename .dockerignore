@@ -7,3 +7,4 @@ data
 .env
 docker-compose*.yml
 README.md
+docs
