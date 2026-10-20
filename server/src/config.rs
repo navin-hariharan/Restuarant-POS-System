@@ -23,6 +23,11 @@ pub struct Config {
     pub backups_limit: usize,
     /// API requests per minute per user (or IP when signed out)
     pub throttle_per_minute: u32,
+    /// Proxies in front of the app that append to X-Forwarded-For (0: none,
+    /// use the connection's address).
+    pub trusted_proxies: usize,
+    /// Take X-Real-IP when there is no X-Forwarded-For.
+    pub trust_real_ip: bool,
     /// Demo mode blocks destructive actions
     pub demo_mode: bool,
     /// First administrator of a brand-new database
@@ -83,6 +88,8 @@ impl Config {
             db_wait_secs: num("DB_WAIT_SECONDS", 90),
             backups_limit: num("DB_BACKUPS_LIMIT", 10),
             throttle_per_minute: num("THROTTLE_MAX_ATTEMPTS", 120),
+            trusted_proxies: num("TRUSTED_PROXIES", 1),
+            trust_real_ip: flag("TRUST_X_REAL_IP"),
             demo_mode: flag("DEMO_MODE"),
             admin_name: var_or("ADMIN_NAME", "Administrator"),
             admin_email: var_or("ADMIN_EMAIL", "admin@example.com"),

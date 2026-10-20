@@ -4,7 +4,7 @@
 use crate::state::AppState;
 use axum::{
     body::Body,
-    extract::{OriginalUri, Request, State},
+    extract::{ConnectInfo, OriginalUri, Request, State},
     http::{header, HeaderName, HeaderValue, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -13,6 +13,7 @@ use axum::{
 use dashmap::DashMap;
 use serde_json::json;
 use std::{
+    net::SocketAddr,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -62,14 +63,46 @@ impl RateLimiter {
     }
 }
 
-/// Per-minute API limit per signed-in token (or per client address). The POS
-/// screen polls a lot, so its routes are not counted.
-pub async fn throttle(State(state): State<AppState>, req: Request, next: Next) -> Response {
+/// Work out the client address once per request (see `activity::pick_client_ip`)
+/// and keep it in a header that clients can not set themselves.
+pub async fn client_address(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
+    let ip = {
+        let headers = req.headers();
+        let forwarded = headers.get_all("x-forwarded-for").iter().filter_map(|v| v.to_str().ok()).collect::<Vec<_>>().join(",");
+        let real_ip = headers.get("x-real-ip").and_then(|v| v.to_str().ok());
+        let peer = req.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip());
+        let forwarded = Some(forwarded.as_str()).filter(|f| !f.is_empty());
+        crate::activity::pick_client_ip(forwarded, real_ip, peer, state.cfg.trusted_proxies, state.cfg.trust_real_ip)
+    };
+    let headers = req.headers_mut();
+    headers.remove(crate::activity::CLIENT_IP_HEADER);
+    if let Some(value) = ip.and_then(|ip| HeaderValue::from_str(&ip.to_string()).ok()) {
+        headers.insert(crate::activity::CLIENT_IP_HEADER, value);
+    }
+    next.run(req).await
+}
+
+/// Per-minute API limit per signed-in user's token, else per client address.
+/// A token only gets its own budget once it is verified (the result is kept
+/// for the handler, so it is looked up once). The POS screen polls a lot, so
+/// its routes are not counted.
+pub async fn throttle(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
     let path = full_path(&req);
     let exempt = path.starts_with("/api/v1/pos/") || path == "/api/v1/auth/check" || path == "/api/health";
     if !exempt {
-        let key = match req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
-            Some(auth) => format!("t:{}", auth.trim_start_matches("Bearer ").split('|').next().unwrap_or("")),
+        let user = match crate::auth::bearer_token(req.headers()) {
+            Some(token) => match crate::auth::resolve_token(&state, &token).await {
+                Ok(user) => user,
+                Err(e) => return e.into_response(),
+            },
+            None => None,
+        };
+        let key = match user {
+            Some(user) => {
+                let key = format!("t:{}", user.token_id);
+                req.extensions_mut().insert(user);
+                key
+            }
             None => format!("ip:{}", crate::activity::client_ip(req.headers())),
         };
         if !state.limiter.allow(&key, state.cfg.throttle_per_minute) {

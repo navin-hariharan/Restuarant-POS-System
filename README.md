@@ -303,6 +303,8 @@ Everything an administrator can change lives in the database and is edited in **
 | `DB_BACKUPS_LIMIT` | `10` | Manual backups kept |
 | `MAX_BACKUP_UPLOAD_MB` | `1024` | Largest backup upload |
 | `THROTTLE_MAX_ATTEMPTS` | `120` | API requests per minute per user |
+| `TRUSTED_PROXIES` | `1` | Proxies in front of the app that add `X-Forwarded-For` (Traefik in Dokploy is one); `0` ignores the header and uses the connection's address |
+| `TRUST_X_REAL_IP` | `false` | Use `X-Real-IP` when there is no `X-Forwarded-For` |
 | `DEMO_MODE` | `false` | Accept changes but discard them |
 | `LOG_LEVEL` | `info` | Log detail (`warn`, `debug`, ...) |
 | `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH` | `mariadb-dump`, `mariadb` | Backup tools |

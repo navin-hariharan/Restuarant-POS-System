@@ -174,6 +174,7 @@ pub fn router(state: AppState) -> Router {
         .layer(CompressionLayer::new())
         .layer(CatchPanicLayer::custom(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "message": "Server Error" }))).into_response()))
         .layer(TraceLayer::new_for_http())
+        .layer(from_fn_with_state(state.clone(), middleware::client_address))
         .with_state(state)
 }
 

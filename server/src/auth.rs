@@ -60,7 +60,11 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 pub fn bearer(parts: &Parts) -> Option<String> {
-    let h = parts.headers.get(axum::http::header::AUTHORIZATION)?.to_str().ok()?;
+    bearer_token(&parts.headers)
+}
+
+pub fn bearer_token(headers: &axum::http::HeaderMap) -> Option<String> {
+    let h = headers.get(axum::http::header::AUTHORIZATION)?.to_str().ok()?;
     let t = h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer "))?.trim();
     (!t.is_empty()).then(|| t.to_string())
 }
