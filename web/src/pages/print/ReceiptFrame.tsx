@@ -1,8 +1,9 @@
 import clsx from 'clsx';
 import { ArrowLeft, FileText, Printer, Ruler } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrandIcon, Button, Input, Spinner } from '@/components/ui';
+import { textLines } from '@/lib/format';
 import { useConfig, useT } from '@/providers/AppProviders';
 
 const STYLE_ID = 'receipt-page-size';
@@ -167,7 +168,16 @@ export function ReceiptHeader({ heading }: { heading?: ReactNode }) {
             <p className="uppercase tracking-wider">{config.name}</p>
             <div className="text-[0.7em] font-normal normal-case">
               {config.phone && <p>{config.phone}</p>}
-              {config.address && <p dangerouslySetInnerHTML={{ __html: config.address }} />}
+              {config.address && (
+                <p>
+                  {textLines(config.address).map((line, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <br />}
+                      {line}
+                    </Fragment>
+                  ))}
+                </p>
+              )}
             </div>
           </>
         )}

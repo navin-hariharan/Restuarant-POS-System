@@ -14,6 +14,11 @@ export function formatNumber(value: unknown, digits = 2): string {
   return (Number.isFinite(n) ? n : 0).toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
+/** Lines of a multi-line setting such as the shop address, split on new lines and <br> tags. */
+export function textLines(value: unknown): string[] {
+  return String(value ?? '').split(/<br\s*\/?>|\r?\n/i);
+}
+
 /** yyyy-mm-dd for <input type="date"> */
 export function toDateInput(d: Date = new Date()): string {
   const p = (x: number) => String(x).padStart(2, '0');
