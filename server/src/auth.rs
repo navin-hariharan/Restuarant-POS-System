@@ -29,7 +29,7 @@ pub struct AuthUser {
 impl AuthUser {
     /// Role 1 (the primary admin role) can do everything.
     pub fn is_super(&self) -> bool {
-        self.role_id < 2
+        is_super_role(self.role_id)
     }
 
     pub fn can(&self, permission: &str) -> bool {
@@ -44,6 +44,11 @@ impl AuthUser {
             Err(AppError::forbidden("You do not have permission to do this."))
         }
     }
+}
+
+/// Roles below id 2 are unrestricted (see [`AuthUser::is_super`]).
+pub fn is_super_role(role_id: i64) -> bool {
+    role_id < 2
 }
 
 pub fn sha256_hex(s: &str) -> String {
@@ -182,6 +187,13 @@ mod tests {
         assert!(h.starts_with("$2y$10$"));
         assert!(verify_password("secret", &h));
         assert!(!verify_password("nope", &h));
+    }
+
+    #[test]
+    fn super_roles() {
+        assert!(is_super_role(1));
+        assert!(is_super_role(0));
+        assert!(!is_super_role(2));
     }
 
     #[test]

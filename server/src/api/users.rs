@@ -175,9 +175,32 @@ async fn check_fields(state: &AppState, input: &Input, except: Option<i64>) -> A
     e.check()
 }
 
+/// The unrestricted admin role, or a role marked as a system base role.
+async fn protected_role(state: &AppState, role_id: i64) -> AppResult<bool> {
+    if crate::auth::is_super_role(role_id) {
+        return Ok(true);
+    }
+    let primary: Option<bool> =
+        sqlx::query_scalar("SELECT is_primary FROM user_roles WHERE id = ?").bind(role_id).fetch_optional(&state.db).await?;
+    Ok(primary.unwrap_or(false))
+}
+
+/// Only an admin may hand out, or manage holders of, a protected role.
+async fn check_role_access(state: &AppState, user: &AuthUser, role_id: i64) -> AppResult<()> {
+    if !user.is_super() && protected_role(state, role_id).await? {
+        return Err(AppError::forbidden("You do not have permission to do this."));
+    }
+    Ok(())
+}
+
+fn input_role(input: &Input) -> i64 {
+    input.str("role_id").and_then(|r| r.trim().parse().ok()).unwrap_or(0)
+}
+
 async fn store(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
     user.require(PERM)?;
     check_fields(&state, &input, None).await?;
+    check_role_access(&state, &user, input_role(&input)).await?;
     let name = input.string("name");
     let hash = crate::auth::hash_password(&input.str("password").unwrap_or_default())?;
     let now = state.settings.get().await.now();
@@ -206,6 +229,7 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(id): Path<Stri
     if row.i64("id") == user.id {
         return Err(AppError::not_acceptable("Can not edit your user from the user manager"));
     }
+    check_role_access(&state, &user, row.i64("role_id")).await?;
     Ok(Json(user_resource(&state, &row).await?))
 }
 
@@ -219,7 +243,9 @@ async fn update(
     user.require(PERM)?;
     let row = find(&state, &id).await?;
     let id = row.i64("id");
+    check_role_access(&state, &user, row.i64("role_id")).await?;
     check_fields(&state, &input, Some(id)).await?;
+    check_role_access(&state, &user, input_role(&input)).await?;
     let name = input.string("name");
     let status = rules::bool_value(&input.val("status"));
     let role_id = input.string("role_id");
@@ -259,6 +285,7 @@ async fn destroy(State(state): State<AppState>, user: AuthUser, headers: HeaderM
     if id == user.id {
         return Err(AppError::not_acceptable("You can not delete your own user"));
     }
+    check_role_access(&state, &user, row.i64("role_id")).await?;
     let mut tx = state.db.begin().await?;
     let result: Result<(), sqlx::Error> = async {
         // The user's cash books go with the user, with the sales recorded in them
