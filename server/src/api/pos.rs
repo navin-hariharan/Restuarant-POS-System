@@ -399,18 +399,25 @@ async fn order_progress(
     if missing(&input, "chef_id") {
         return Err(AppError::field("chef_id", "Please specify the chef"));
     }
-    let progress = php::to_float(input.get("progress"));
+    let Some(progress) = common::number(input.get("progress")).filter(|p| (0.0..=100.0).contains(p)) else {
+        return Err(AppError::field("progress", "The selected progress is invalid."));
+    };
     let s = state.settings.get().await;
     let now = s.now();
     let mut data = SaleData::default();
-    data.set("progress", input.val("progress"));
-    data.set("items", input.val("items"));
+    data.set("progress", crate::util::json_num(progress));
     data.set("chef_id", input.val("chef_id"));
     data.set("is_preparing", Value::Bool(progress > 0.0));
     data.set("prepared_at", if progress > 99.0 { Value::from(now.format("%Y-%m-%d %H:%M:%S").to_string()) } else { Value::Null });
 
     let mut tx = state.db.begin().await?;
     let sale = lock_sale(&mut tx, sale.i64("id")).await?;
+    if sale.bool("is_cancelled") {
+        return Err(AppError::unprocessable("This order has been cancelled"));
+    }
+    // The kitchen only ticks lines off: take each line's ready flag, nothing else.
+    let stored = items_list(Some(&json_col(&sale, "items")));
+    data.set("items", Value::Array(merge_ready(&stored, &items_list(input.get("items")))));
     let cols = data.columns(&mut tx).await?;
     common::update_sale(&mut tx, sale.i64("id"), cols, now).await?;
     tx.commit().await?;
@@ -591,6 +598,27 @@ async fn cancel_order(
     activity::log(&state, &user, &headers, &state.t("Order information cancelled successfully").await, Some(&sale.str("tracking"))).await;
     notify::order_event(&state, sale.i64("id"), OrderEvent::Cancelled);
     Ok(common::reply(json!({ "message": state.t("Cancelled successfully").await })))
+}
+
+/// The stored order lines with the kitchen's ready flags applied. Lines are
+/// matched by cart_uuid, or by position for lines without one.
+fn merge_ready(stored: &[Value], sent: &[Value]) -> Vec<Value> {
+    let key = |v: &Value| v.get("cart_uuid").and_then(Value::as_str).filter(|k| !k.is_empty()).map(str::to_string);
+    stored
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let from = match key(line) {
+                Some(k) => sent.iter().find(|s| key(s).as_deref() == Some(k.as_str())),
+                None => sent.get(i).filter(|s| key(s).is_none()),
+            };
+            let mut line = line.clone();
+            if let (Some(obj), Some(ready)) = (line.as_object_mut(), from.and_then(|f| f.get("is_ready"))) {
+                obj.insert("is_ready".into(), Value::Bool(php::filter_bool(ready)));
+            }
+            line
+        })
+        .collect()
 }
 
 /// The first discount or tip value of a checkout that is out of range.
@@ -832,6 +860,27 @@ async fn reservation_checkout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn kitchen_only_changes_ready_flags() {
+        let stored = vec![
+            json!({"cart_uuid": "a", "name": "Soup", "price": 5, "qty": 1, "is_ready": false}),
+            json!({"cart_uuid": "b", "name": "Tea", "price": 2, "qty": 2, "is_ready": false}),
+            json!({"name": "Old line", "price": 1, "qty": 1, "is_ready": false}),
+        ];
+        let sent = vec![
+            json!({"cart_uuid": "b", "name": "Free tea", "price": 0, "qty": 50, "is_ready": true}),
+            json!({"cart_uuid": "a", "name": "Soup", "price": 0, "is_ready": false}),
+            json!({"name": "x", "price": 0, "is_ready": "1"}),
+            json!({"cart_uuid": "c", "name": "Extra", "price": 9, "is_ready": true}),
+        ];
+        let merged = merge_ready(&stored, &sent);
+        assert_eq!(merged.len(), 3);
+        assert_eq!(merged[0], stored[0]);
+        assert_eq!(merged[1], json!({"cart_uuid": "b", "name": "Tea", "price": 2, "qty": 2, "is_ready": true}));
+        assert_eq!(merged[2]["is_ready"], json!(true));
+        assert_eq!(merged[2]["price"], json!(1));
+    }
 
     #[test]
     fn checkout_adjustments() {
