@@ -7,13 +7,17 @@ import { useT } from '@/providers/AppProviders';
 
 function useOverlay(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers usually pass an inline onClose; reading it through a ref keeps the
+  // effect (and its initial focus) from re-running on every parent render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
       if (e.key === 'Tab' && ref.current) {
         const nodes = ref.current.querySelectorAll<HTMLElement>(
@@ -35,7 +39,12 @@ function useOverlay(open: boolean, onClose: () => void) {
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     setTimeout(() => {
-      const el = ref.current?.querySelector<HTMLElement>('[autofocus],[data-autofocus],input,select,textarea,button');
+      const root = ref.current;
+      if (!root || root.contains(document.activeElement)) return;
+      const el =
+        root.querySelector<HTMLElement>('[autofocus],[data-autofocus]') ??
+        root.querySelector<HTMLElement>('input:not([type=hidden]):not([disabled]),select:not([disabled]),textarea:not([disabled])') ??
+        root.querySelector<HTMLElement>('button:not([disabled])');
       el?.focus();
     }, 0);
     return () => {
@@ -43,7 +52,7 @@ function useOverlay(open: boolean, onClose: () => void) {
       document.body.style.overflow = overflow;
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   return ref;
 }
 
