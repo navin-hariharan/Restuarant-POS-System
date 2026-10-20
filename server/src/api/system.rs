@@ -125,6 +125,7 @@ async fn app_config(State(state): State<AppState>, headers: HeaderMap) -> Json<V
         "taxation": m.taxation,
         "digital_menu": m.digital_menu,
         "digital_menu_pin": m.digital_menu_pin,
+        "digital_menu_verify_email": m.digital_menu_verify_email,
         "allow_expiry_date": m.allow_expiry_date,
         "room_reservations_enabled": m.room_reservations,
     });

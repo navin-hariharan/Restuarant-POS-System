@@ -31,6 +31,27 @@ const MIGRATIONS: &[(&str, &str)] = &[
         SET permissions = JSON_REMOVE(permissions, JSON_UNQUOTE(JSON_SEARCH(permissions, 'one', 'overall_report')))
         WHERE JSON_VALID(permissions) AND JSON_SEARCH(permissions, 'one', 'overall_report') IS NOT NULL"#,
     ),
+    (
+        "2026_10_20_000001_create_digital_menu_email_otps_table",
+        // One row per e-mail code sent from the digital menu; holds only hashes.
+        r#"CREATE TABLE IF NOT EXISTS `digital_menu_email_otps` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `email` varchar(191) NOT NULL,
+  `table_id` bigint(20) unsigned NOT NULL,
+  `code_hash` char(64) NOT NULL,
+  `salt` char(16) NOT NULL,
+  `attempts` int(10) unsigned NOT NULL DEFAULT 0,
+  `ip` varchar(191) DEFAULT NULL,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `verified_at` timestamp NULL DEFAULT NULL,
+  `token_hash` char(64) DEFAULT NULL,
+  `token_expires_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `digital_menu_email_otps_email_created_at_index` (`email`,`created_at`),
+  KEY `digital_menu_email_otps_token_hash_index` (`token_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"#,
+    ),
 ];
 
 /// Tables every POS database has
@@ -103,6 +124,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
     ("service_tables", "pin_locked_until", "timestamp NULL DEFAULT NULL"),
     ("settings", "digital_menu_require_pin", "tinyint(1) NOT NULL DEFAULT 1"),
     ("settings", "seating_pin_max_hours", "int(10) unsigned NOT NULL DEFAULT 8"),
+    ("settings", "digital_menu_verify_email", "tinyint(1) NOT NULL DEFAULT 1"),
 ];
 
 async fn ensure_columns(db: &Db) -> anyhow::Result<()> {

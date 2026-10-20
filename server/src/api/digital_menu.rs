@@ -81,7 +81,7 @@ fn clip(v: Option<&Value>, max: usize) -> Option<String> {
 }
 
 /// Simple e-mail shape check (the `email` rule accepts RFC addresses).
-fn valid_email(e: &str) -> bool {
+pub(super) fn valid_email(e: &str) -> bool {
     let Some((local, domain)) = e.rsplit_once('@') else { return false };
     !local.is_empty()
         && !domain.is_empty()
@@ -218,11 +218,18 @@ async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input:
         Some(Value::String(_)) => {}
         Some(_) => errors.add("name", "The name must be a string."),
     }
-    let email = input.opt_str("email");
+    let verify = modes.digital_menu_verify_email;
+    let mut email = input.opt_str("email");
     if let Some(e) = &email {
         if !valid_email(e) || e.len() > 191 {
             errors.add("email", "The email must be a valid email address.");
         }
+    } else if verify {
+        errors.add("email", "The email field is required.");
+    }
+    // A verified address is stored the way it was verified.
+    if verify {
+        email = email.as_deref().and_then(super::email_otp::normalize_email);
     }
     let phone = input.opt_str("phone");
     if phone.as_ref().map(|p| p.chars().count() > 50).unwrap_or(false) {
@@ -295,6 +302,18 @@ async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input:
             return Err(check.error());
         }
     }
+    // The address must have been verified for this table, with an unexpired token.
+    if verify {
+        let token = input.opt_str("email_token").unwrap_or_default();
+        let ok = match (table, &email) {
+            (Some(t), Some(e)) => super::email_otp::token_valid(&mut tx, t, e, &token, now).await?,
+            _ => false,
+        };
+        if !ok {
+            tx.commit().await?;
+            return Err(AppError::field("email", tr!("Please verify your email address before placing the order.")));
+        }
+    }
     // Reuse a customer only on a real e-mail / phone match.
     let mut customer: Option<i64> = None;
     if email.is_some() || phone.is_some() {
@@ -302,7 +321,9 @@ async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input:
         if let Some(e) = &email {
             q.push_args(" OR email = ?", [e.clone()]);
         }
-        if let Some(p) = &phone {
+        // With verified e-mail only that address picks the customer: an
+        // unverified phone number must not attach the order to someone else.
+        if let Some(p) = phone.as_ref().filter(|_| !verify) {
             q.push_args(" OR phone = ?", [p.clone()]);
         }
         q.push(" ORDER BY id LIMIT 1");

@@ -1,10 +1,10 @@
 import clsx from 'clsx';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, ImageOff, LayoutGrid, Lock, Plus, ShoppingBag, Trash2, Utensils } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, ImageOff, LayoutGrid, Lock, Mail, Plus, ShoppingBag, Trash2, Utensils } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { api, fieldErrors, type Paginated } from '@/lib/api';
+import { api, errorMessage, fieldErrors, type Paginated } from '@/lib/api';
 import { money as round2, orderTotals, recalcItem, type CartItem, type PosProduct, type TaxSetup } from '@/lib/cart';
 import { storage } from '@/lib/format';
 import { BrandIcon, fallbackTo } from '@/components/ui/BrandIcon';
@@ -69,6 +69,8 @@ export default function DigitalMenu() {
   const cartKey = `dm_cart_${tableId}`;
   const pinRequired = !!config.modes.digital_menu_pin;
   const pinKey = `dm_pin_${tableId}`;
+  const verifyEmail = !!config.modes.digital_menu_verify_email;
+  const tokenKey = (email: string) => `dm_email_token_${tableId}_${email.trim().toLowerCase()}`;
 
   const [search, setSearch] = useState('');
   const debounced = useDebounced(search, 350);
@@ -79,6 +81,19 @@ export default function DigitalMenu() {
   const [customer, setCustomer] = useState<Customer>(() => storage.get<Customer>('dm_customer', { name: '', phone: '', email: '' }));
   const [chefNote, setChefNote] = useState('');
   const [pin, setPin] = useState(() => session.get(pinKey));
+  const [otp, setOtp] = useState({ sentTo: '', code: '', cooldown: 0, sending: false, verifying: false });
+  const [tokenVersion, setTokenVersion] = useState(0);
+  const emailToken = useMemo(
+    () => (verifyEmail && customer.email.trim() ? session.get(tokenKey(customer.email)) : ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [verifyEmail, customer.email, tokenVersion, tableId],
+  );
+  const codeSent = !!otp.sentTo && otp.sentTo === customer.email.trim().toLowerCase();
+  useEffect(() => {
+    if (otp.cooldown <= 0) return;
+    const id = setTimeout(() => setOtp((o) => ({ ...o, cooldown: o.cooldown - 1 })), 1000);
+    return () => clearTimeout(id);
+  }, [otp.cooldown]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [placing, setPlacing] = useState(false);
   const [placed, setPlaced] = useState<Placed | null>(null);
@@ -164,6 +179,53 @@ export default function DigitalMenu() {
         : items.map((i) => (i.cart_uuid === cartUuid ? recalcItem({ ...i, qty }, itemBasedTax) : i)),
     );
 
+  /* ------------------------------------------------- e-mail verification */
+
+  const sendCode = async () => {
+    const errs: Record<string, string> = {};
+    if (!/^\S+@\S+\.\S+$/.test(customer.email.trim())) errs.email = t('Enter a valid email address');
+    if (pinRequired && !/^\d{6}$/.test(pin.trim())) errs.pin = t('Enter the 6-digit table code');
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setOtp((o) => ({ ...o, sending: true }));
+    try {
+      await api.post('digital-menu/email-otp/send', { table_id: Number(tableId), email: customer.email.trim(), ...(pinRequired ? { pin: pin.trim() } : {}) }, { silent: true });
+      setOtp({ sentTo: customer.email.trim().toLowerCase(), code: '', cooldown: 60, sending: false, verifying: false });
+      toast.success(t('Code sent. Check your email.'));
+    } catch (e) {
+      setOtp((o) => ({ ...o, sending: false }));
+      const errs = fieldErrors(e);
+      if (errs.pin) {
+        session.set(pinKey, '');
+        setPin('');
+      }
+      setErrors(Object.keys(errs).length ? errs : { email: errorMessage(e) });
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!/^\d{6}$/.test(otp.code.trim())) {
+      setErrors({ otp: t('Enter the 6-digit code from the email') });
+      return;
+    }
+    setOtp((o) => ({ ...o, verifying: true }));
+    try {
+      const res = await api.post<{ verification_token: string }>(
+        'digital-menu/email-otp/verify',
+        { table_id: Number(tableId), email: customer.email.trim(), code: otp.code.trim() },
+        { silent: true },
+      );
+      session.set(tokenKey(customer.email), res.data.verification_token);
+      setTokenVersion((v) => v + 1);
+      setOtp({ sentTo: '', code: '', cooldown: 0, sending: false, verifying: false });
+      setErrors({});
+    } catch (e) {
+      setOtp((o) => ({ ...o, verifying: false }));
+      const errs = fieldErrors(e);
+      setErrors(Object.keys(errs).length ? errs : { otp: errorMessage(e) });
+    }
+  };
+
   /* ----------------------------------------------------------- placement */
 
   const placeOrder = async () => {
@@ -171,6 +233,10 @@ export default function DigitalMenu() {
     if (!customer.name.trim()) errs.name = t('Name is required');
     if (customer.email && !/^\S+@\S+\.\S+$/.test(customer.email)) errs.email = t('Enter a valid email address');
     if (pinRequired && !/^\d{6}$/.test(pin.trim())) errs.pin = t('Enter the 6-digit table code');
+    if (verifyEmail && !errs.email) {
+      if (!customer.email.trim()) errs.email = t('Email is required to order from this table');
+      else if (!emailToken) errs.email = t('Please verify your email address before placing the order.');
+    }
     setErrors(errs);
     if (Object.keys(errs).length || !cart.length || closed) return;
     setPlacing(true);
@@ -181,6 +247,7 @@ export default function DigitalMenu() {
       phone: customer.phone.trim() || null,
       email: customer.email.trim() || null,
       ...(pinRequired ? { pin: pin.trim() } : {}),
+      ...(verifyEmail ? { email_token: emailToken } : {}),
       items: cart,
       tax: orderTax ?? config.tax_setup,
       tax_amount: round2(totals.taxAmount),
@@ -218,6 +285,10 @@ export default function DigitalMenu() {
         session.set(pinKey, '');
         setPin('');
         tables.refetch();
+      }
+      if (errs.email && verifyEmail) {
+        session.set(tokenKey(customer.email), '');
+        setTokenVersion((v) => v + 1);
       }
       setErrors(errs);
     } finally {
@@ -494,6 +565,22 @@ export default function DigitalMenu() {
               }}
             >
               <h3 className="text-sm font-semibold">{t('Your details')}</h3>
+              {pinRequired && (
+                <Input
+                  label={t('Table code')}
+                  required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  className="font-mono tracking-[0.3em]"
+                  value={pin}
+                  error={errors.pin}
+                  help={t('Ask your server for the table code')}
+                  disabled={closed}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                />
+              )}
               <Input
                 label={t('Name')}
                 required
@@ -515,28 +602,50 @@ export default function DigitalMenu() {
                 <Input
                   label={t('Email')}
                   type="email"
+                  required={verifyEmail}
                   autoComplete="email"
                   value={customer.email}
                   error={errors.email}
                   onChange={(e) => setCustomer({ ...customer, email: e.target.value })}
                 />
               </div>
-              {pinRequired && (
-                <Input
-                  label={t('Table code')}
-                  required
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  className="font-mono tracking-[0.3em]"
-                  value={pin}
-                  error={errors.pin}
-                  help={t('Ask your server for the table code')}
-                  disabled={closed}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                />
-              )}
+              {verifyEmail &&
+                (emailToken ? (
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400" role="status">
+                    <CheckCircle2 className="h-4 w-4" /> {t('Email verified')}
+                  </p>
+                ) : (
+                  <div className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" className="btn-secondary btn-sm" onClick={sendCode} disabled={otp.sending || otp.cooldown > 0 || closed}>
+                        {otp.sending ? <Spinner /> : <Mail className="h-4 w-4" />}
+                        {otp.cooldown > 0 ? t('Send again in :seconds s', { seconds: String(otp.cooldown) }) : codeSent ? t('Send a new code') : t('Send code')}
+                      </button>
+                      <span className="text-xs text-slate-500">{codeSent ? t('Check your inbox for a 6-digit code.') : t('We email you a code to confirm your address.')}</span>
+                    </div>
+                    {codeSent && (
+                      <div className="flex items-start gap-2">
+                        <Input
+                          label={t('Verification code')}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          autoComplete="one-time-code"
+                          className="font-mono tracking-[0.3em]"
+                          wrapperClassName="flex-1"
+                          value={otp.code}
+                          error={errors.otp}
+                          onChange={(e) => setOtp({ ...otp, code: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                        />
+                        <button type="button" className="btn-primary btn-sm mt-7" onClick={verifyCode} disabled={otp.verifying}>
+                          {otp.verifying && <Spinner />}
+                          {t('Verify')}
+                        </button>
+                      </div>
+                    )}
+                    {!codeSent && errors.otp && <p className="error-text">{errors.otp}</p>}
+                  </div>
+                ))}
               <Textarea label={t('Note for chef')} rows={2} value={chefNote} onChange={(e) => setChefNote(e.target.value)} placeholder={t('Allergies or anything the kitchen should know')} />
               {errors.table_id && <p className="error-text">{errors.table_id}</p>}
               <button type="submit" className="sr-only">

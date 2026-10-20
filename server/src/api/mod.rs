@@ -11,6 +11,7 @@ pub mod cashbooks;
 pub mod customers;
 pub mod dashboard;
 pub mod digital_menu;
+pub mod email_otp;
 pub mod expense_types;
 pub mod expenses;
 pub mod food_categories;
@@ -63,6 +64,7 @@ pub fn router() -> Router<AppState> {
         .merge(sales::router())
         .merge(seating::router())
         .merge(digital_menu::router())
+        .merge(email_otp::router())
         .merge(print::router())
         .merge(cashbooks::router())
         .merge(reports::router())

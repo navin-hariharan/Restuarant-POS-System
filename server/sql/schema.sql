@@ -32,6 +32,24 @@ CREATE TABLE `customers` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `digital_menu_email_otps` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `email` varchar(191) NOT NULL,
+  `table_id` bigint(20) unsigned NOT NULL,
+  `code_hash` char(64) NOT NULL,
+  `salt` char(16) NOT NULL,
+  `attempts` int(10) unsigned NOT NULL DEFAULT 0,
+  `ip` varchar(191) DEFAULT NULL,
+  `expires_at` timestamp NULL DEFAULT NULL,
+  `verified_at` timestamp NULL DEFAULT NULL,
+  `token_hash` char(64) DEFAULT NULL,
+  `token_expires_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `digital_menu_email_otps_email_created_at_index` (`email`,`created_at`),
+  KEY `digital_menu_email_otps_token_hash_index` (`token_hash`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE `expense_types` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `title` varchar(191) NOT NULL,
@@ -520,6 +538,7 @@ CREATE TABLE `settings` (
   `digital_menu` tinyint(1) NOT NULL DEFAULT 1,
   `allow_expiry_date` tinyint(1) NOT NULL DEFAULT 0,
   `digital_menu_require_pin` tinyint(1) NOT NULL DEFAULT 1,
+  `digital_menu_verify_email` tinyint(1) NOT NULL DEFAULT 1,
   `seating_pin_max_hours` int(10) unsigned NOT NULL DEFAULT 8,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

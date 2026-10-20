@@ -174,7 +174,7 @@ pub fn row_is_open(s: &Settings, row: &Row) -> bool {
     Seat::from_row(row).is_open(s.now(), s.seating_pin_max_hours())
 }
 
-/// End the seating: no PIN, no counters.
+/// End the seating: no PIN, no counters, no e-mail codes or tokens.
 pub async fn close_table(conn: &mut MySqlConnection, table_id: i64) -> AppResult<()> {
     tx_exec(
         conn,
@@ -182,7 +182,7 @@ pub async fn close_table(conn: &mut MySqlConnection, table_id: i64) -> AppResult
         vec![table_id.into()],
     )
     .await?;
-    Ok(())
+    super::email_otp::forget_table(conn, table_id).await
 }
 
 /// Close the sale's table once the sale stops being open (paid, cancelled,
@@ -258,6 +258,10 @@ async fn open(state: AppState, user: AuthUser, headers: HeaderMap, id: String, r
         tx.commit().await?;
         let (pin, started) = (seat.pin.unwrap_or_default(), seat.started_at.unwrap_or(now));
         return Ok(Json(seat_json(&s, &pin, started)));
+    }
+    // A new seating starts without the previous guests' verified addresses.
+    if !open {
+        super::email_otp::forget_table(&mut tx, row.i64("id")).await?;
     }
     let pin = issue(&mut tx, row.i64("id"), now).await?;
     tx.commit().await?;

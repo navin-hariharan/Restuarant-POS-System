@@ -74,6 +74,7 @@ const BOOL_COLUMNS: &[&str] = &[
     "digital_menu",
     "allow_expiry_date",
     "digital_menu_require_pin",
+    "digital_menu_verify_email",
 ];
 
 /// Stored secrets: never sent back, shown as MASK when a value is stored.
@@ -260,6 +261,7 @@ fn label(field: &str) -> String {
         "recaptcha_public" => tr!("recaptcha public"),
         "recaptcha_private" => tr!("recaptcha private"),
         "digital_menu_require_pin" => tr!("table code"),
+        "digital_menu_verify_email" => tr!("email verification"),
         "seating_pin_max_hours" => tr!("table code validity"),
         "currency_symbol" => tr!("currency symbol"),
         "app_url" => tr!("app url"),
@@ -1111,8 +1113,10 @@ const ADVANCE_REQUIRED: [&str; 18] = [
 async fn get_advance(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
     need(&user, "advance_configuration")?;
     let mut keys: Vec<&str> = ADVANCE_REQUIRED.to_vec();
-    keys.extend(["allow_expiry_date", "digital_menu_require_pin", "seating_pin_max_hours"]);
-    Ok(Json(Value::Object(pick(&state, &keys).await?)))
+    keys.extend(["allow_expiry_date", "digital_menu_require_pin", "digital_menu_verify_email", "seating_pin_max_hours"]);
+    let mut out = pick(&state, &keys).await?;
+    out.insert("mail_ready".into(), Value::Bool(state.settings.get().await.mail_ready()));
+    Ok(Json(Value::Object(out)))
 }
 
 async fn set_advance(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
@@ -1123,6 +1127,12 @@ async fn set_advance(State(state): State<AppState>, user: AuthUser, headers: Hea
     }
     c.boolean("allow_expiry_date", false).await;
     c.boolean("digital_menu_require_pin", false).await;
+    c.boolean("digital_menu_verify_email", false).await;
+    // E-mail codes can only be switched on once outgoing mail can deliver them.
+    let verify = input.get("digital_menu_verify_email").filter(|v| !v.is_null()).map(crate::util::truthy);
+    if verify == Some(true) && !c.stored.flag("digital_menu_verify_email") && !c.stored.mail_ready() {
+        c.add("digital_menu_verify_email", tr!("Set up Outgoing mail with a sender address before turning on :attribute."), &[]).await;
+    }
     let max_hours = input.get("seating_pin_max_hours").filter(|v| !v.is_null()).map(crate::util::num);
     if max_hours.is_some_and(|h| h.fract() != 0.0 || !(1.0..=72.0).contains(&h)) {
         c.add("seating_pin_max_hours", tr!("The :attribute must be between :min and :max."), &[("min", "1"), ("max", "72")]).await;
@@ -1134,6 +1144,7 @@ async fn set_advance(State(state): State<AppState>, user: AuthUser, headers: Hea
     }
     ch.take(&input, "allow_expiry_date", Kind::Flag);
     ch.take(&input, "digital_menu_require_pin", Kind::Flag);
+    ch.take(&input, "digital_menu_verify_email", Kind::Flag);
     if let Some(h) = max_hours {
         ch.set("seating_pin_max_hours", Arg::Int(h as i64));
     }

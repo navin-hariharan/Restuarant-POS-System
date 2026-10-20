@@ -126,15 +126,15 @@ fn urlencode(s: &str) -> String {
         .collect()
 }
 
-struct Mail<'a> {
-    greeting: String,
-    intro: Vec<String>,
-    action: Option<(String, &'a str)>,
-    outro: Vec<String>,
+pub(crate) struct Mail<'a> {
+    pub greeting: String,
+    pub intro: Vec<String>,
+    pub action: Option<(String, &'a str)>,
+    pub outro: Vec<String>,
 }
 
 /// A simple, mail-client friendly HTML message.
-async fn render_mail(state: &AppState, s: &Settings, m: Mail<'_>) -> String {
+pub(crate) async fn render_mail(state: &AppState, s: &Settings, m: Mail<'_>) -> String {
     let app = html_escape(&s.str("app_name"));
     let p = |t: &str| format!("<p style=\"margin:0 0 16px;font-size:15px;line-height:1.5;color:#3d4852\">{}</p>", html_escape(t));
     let mut body = format!("<h1 style=\"margin:0 0 16px;font-size:18px;color:#3d4852\">{}</h1>", html_escape(&m.greeting));

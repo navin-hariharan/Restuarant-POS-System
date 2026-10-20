@@ -116,12 +116,21 @@ impl Settings {
             taxation: self.flag("taxation"),
             digital_menu: self.flag("digital_menu"),
             digital_menu_pin: self.flag("digital_menu_require_pin"),
+            // paused while outgoing mail can not deliver the code
+            digital_menu_verify_email: self.flag("digital_menu_verify_email") && self.mail_ready(),
             allow_expiry_date: self.flag("allow_expiry_date"),
             send_notification: self.flag("advance_send_notification"),
             wa_status: self.flag("wa_status"),
             sms_status: self.flag("sms_status"),
             display_logo: self.flag("display_logo"),
         }
+    }
+
+    /// Outgoing mail can reach a guest: a sender is set and the mailer is
+    /// not the log (which would only write the message to the server log).
+    pub fn mail_ready(&self) -> bool {
+        self.opt_str("mail_from_address").is_some()
+            && matches!(self.opt_str("mail_mailer").as_deref(), Some("smtp" | "sendmail" | "mailgun"))
     }
 
     /// Hours a seating PIN stays valid after the table was opened.
@@ -169,6 +178,8 @@ pub struct Modes {
     pub digital_menu: bool,
     /// Digital menu orders need the table's seating PIN.
     pub digital_menu_pin: bool,
+    /// Digital menu orders need an e-mail address confirmed with a code.
+    pub digital_menu_verify_email: bool,
     pub allow_expiry_date: bool,
     pub send_notification: bool,
     pub wa_status: bool,

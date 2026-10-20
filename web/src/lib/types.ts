@@ -22,6 +22,8 @@ export type Modes = {
   digital_menu: boolean;
   /** Digital menu orders need the table's seating PIN. */
   digital_menu_pin?: boolean;
+  /** Digital menu orders need an e-mail address confirmed with a code. */
+  digital_menu_verify_email?: boolean;
   allow_expiry_date: boolean;
 };
 

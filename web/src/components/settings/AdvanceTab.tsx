@@ -45,6 +45,11 @@ const GROUPS: { title: string; description: string; flags: { key: string; label:
         label: 'Require a table code',
         help: 'Staff open the table and give the guests a 6-digit code, which they enter to order. Closing or paying the table ends the code.',
       },
+      {
+        key: 'digital_menu_verify_email',
+        label: 'Require a verified email address',
+        help: 'Guests confirm their email address with a code sent to it before ordering. Needs Outgoing mail with a sender address.',
+      },
     ],
   },
   {
@@ -92,6 +97,12 @@ export default function AdvanceTab() {
                 {e[f.key] && <p className="error-text">{e[f.key]}</p>}
               </div>
             ))}
+            {g.title === 'Digital menu ordering' && !!v.digital_menu_verify_email && form.raw && !form.raw.mail_ready && (
+              <div className="flex items-start gap-2 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/50 dark:text-amber-200" role="note">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{t('Email verification is paused until Outgoing mail has a sender address and a mailer other than Log.')}</span>
+              </div>
+            )}
             {g.title === 'Digital menu ordering' && (
               <div className="p-4">
                 <Input
