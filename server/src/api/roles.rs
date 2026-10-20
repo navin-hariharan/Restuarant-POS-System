@@ -231,6 +231,7 @@ async fn permissions(State(state): State<AppState>, user: AuthUser) -> AppResult
         ("", tr!("Portal area")),
         ("pos_portal", tr!("POS portal")),
         ("order_checkout", tr!("Allow to process billing in POS portal")),
+        ("apply_discount", tr!("Allow to apply discounts and change prices in POS portal")),
         ("kitchen_portal", tr!("Kitchen portal")),
         ("", tr!("Food area")),
         ("manage_food_categories", tr!("Manage food category")),

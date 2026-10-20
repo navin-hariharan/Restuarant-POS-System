@@ -175,13 +175,15 @@ export function CartPanel({
       {/* Totals & actions */}
       <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-800">
         <div className="flex gap-2">
-          <AdjustButton icon={<Percent className="h-4 w-4" />} active={Number(draft.discount_rate) > 0} onClick={actions.openDiscount}>
-            {Number(draft.discount_rate) > 0
-              ? draft.is_discount_in_percentage
-                ? `${Number(draft.discount_rate)}%`
-                : money(draft.discount_rate)
-              : t('Discount')}
-          </AdjustButton>
+          {can('apply_discount') && (
+            <AdjustButton icon={<Percent className="h-4 w-4" />} active={Number(draft.discount_rate) > 0} onClick={actions.openDiscount}>
+              {Number(draft.discount_rate) > 0
+                ? draft.is_discount_in_percentage
+                  ? `${Number(draft.discount_rate)}%`
+                  : money(draft.discount_rate)
+                : t('Discount')}
+            </AdjustButton>
+          )}
           {modes.taxation && !draft.is_item_based_taxation && (
             <AdjustButton icon={<Receipt className="h-4 w-4" />} active onClick={actions.openTax}>
               <span className="truncate">{tax?.tax_title ?? t('Tax')}</span>

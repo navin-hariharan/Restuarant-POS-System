@@ -11,6 +11,7 @@ use crate::{
     state::AppState,
 };
 use chrono::NaiveDateTime;
+use rust_decimal::{prelude::ToPrimitive, Decimal, RoundingStrategy};
 use serde_json::{json, Map, Value};
 use sqlx::MySqlConnection;
 use std::collections::HashMap;
@@ -819,12 +820,10 @@ pub async fn create_sale_items(
             Some(v @ Value::Number(_)) => php::number_string(v).unwrap_or_default(),
             _ => return Err(AppError::field("items", "The item name field is required.")),
         };
-        let qty = php::to_float(obj.get("qty"));
-        let price = php::to_float(obj.get("price"));
-        let total = crate::util::round(php::to_float(obj.get("sub_total")), 2);
-        if qty.abs() > 1_000_000.0 || price.abs() >= 1e8 || total.abs() >= 1e8 {
-            return Err(AppError::field("items", "The selected items are invalid."));
-        }
+        let qty = number(obj.get("qty")).filter(|q| *q > 0.0 && *q <= MAX_LINE_QTY).ok_or_else(invalid)?;
+        let price = number(obj.get("price")).filter(|p| (0.0..1e8).contains(p)).ok_or_else(invalid)?;
+        let total = number(obj.get("sub_total")).filter(|t| (0.0..1e8).contains(t)).ok_or_else(invalid)?;
+        let total = crate::util::round(total, 2);
         let category = match category {
             Value::Null => Arg::Null,
             v => Arg::Str(php::number_string(&v).unwrap_or_default()),
@@ -850,6 +849,233 @@ pub async fn create_sale_items(
         .await?;
     }
     Ok(())
+}
+
+/* -------------------------------------------------------------- pricing */
+
+/// `Number(x.toFixed(2))`: two decimals from the exact binary value, ties away from zero.
+pub fn to_fixed2(v: f64) -> f64 {
+    Decimal::from_f64_retain(v)
+        .map(|d| d.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero))
+        .and_then(|d| d.to_f64())
+        .unwrap_or(0.0)
+}
+
+/// Money rounding of stored totals (`Math.round((n + EPSILON) * 100) / 100`).
+pub fn money(v: f64) -> f64 {
+    ((v + f64::EPSILON) * 100.0).round() / 100.0
+}
+
+/// A tax setup as the cart sees it.
+#[derive(Clone, Copy, Default)]
+pub struct TaxRule {
+    pub rate: f64,
+    pub vat: bool,
+    pub fixed: bool,
+    pub included: bool,
+}
+
+impl TaxRule {
+    pub fn from_json(v: &Value) -> Self {
+        let get = |k: &str| v.get(k).cloned().unwrap_or(Value::Null);
+        let rate = match get("tax_rate") {
+            Value::Null => php::to_float(v.get("rate")),
+            r => php::to_float(Some(&r)),
+        };
+        let t = |k: &str| matches!(get(k), Value::Bool(true)) || get(k) == json!(1) || get(k) == json!("1") || get(k) == json!("true");
+        TaxRule { rate, vat: t("is_vat"), fixed: t("is_tax_fix"), included: t("is_tax_included") }
+    }
+
+    /// Tax on `base` (VAT / fixed / percent), rounded to cents like the till.
+    pub fn tax_for(&self, base: f64) -> f64 {
+        let value = if self.vat {
+            if self.included {
+                base - base / (1.0 + self.rate / 100.0)
+            } else {
+                base * (self.rate / 100.0)
+            }
+        } else if self.fixed {
+            self.rate
+        } else {
+            base * (self.rate / 100.0)
+        };
+        to_fixed2(value)
+    }
+}
+
+/// The order tax setup from Settings > Tax (the shape the web app sends).
+pub fn order_tax(s: &Settings) -> Value {
+    let rate = crate::util::json_num(s.row.f64("tax_rate"));
+    json!({
+        "tax_title": s.row.val("tax_title"),
+        "rate": rate,
+        "tax_rate": rate,
+        "is_tax_fix": s.flag("is_tax_fix"),
+        "is_tax_included": s.flag("is_tax_included"),
+        "tax_id": s.row.opt_str("tax_id"),
+        "is_vat": s.flag("is_vat"),
+    })
+}
+
+pub struct Totals {
+    pub items: f64,
+    /// before discount and tax
+    pub price: f64,
+    pub cost: f64,
+    pub discount: f64,
+    pub net: f64,
+    pub tax: f64,
+    pub total: f64,
+    pub profit: f64,
+    pub progress: i64,
+}
+
+/// orderTotals() of the web app (the tip is not part of the total).
+/// `discount` is the discount rate: a percentage when `percent`, else an amount.
+pub fn totals(lines: &[Value], item_based: bool, tax: &TaxRule, discount: f64, percent: bool) -> Totals {
+    let f = |l: &Value, k: &str| php::to_float(l.get(k));
+    let items: f64 = lines.iter().map(|l| f(l, "qty")).sum();
+    let price: f64 = lines.iter().map(|l| f(l, "sub_total")).sum();
+    let cost: f64 = lines.iter().map(|l| f(l, "cost") * f(l, "qty") + f(l, "modifiers_cost")).sum();
+    let discount = if percent { discount / 100.0 * price } else { discount };
+    let after = price - discount;
+    let tax_amount = if item_based { lines.iter().map(|l| f(l, "tax_amount")).sum() } else { tax.tax_for(after) };
+    let net = if item_based {
+        lines.iter().map(|l| f(l, "sub_total_before_tax")).sum()
+    } else if tax.included {
+        price - tax_amount
+    } else {
+        price
+    };
+    let total = if item_based || tax.included { after } else { after + tax_amount };
+    let ready = lines.iter().filter(|l| l.get("is_ready").and_then(Value::as_bool).unwrap_or(false)).count();
+    let progress = if lines.is_empty() { 0 } else { ((ready as f64 / lines.len() as f64) * 100.0).round() as i64 };
+    Totals { items, price, cost, discount, net, tax: tax_amount, total, profit: after - cost, progress }
+}
+
+/// Catalogue rows needed to price the requested lines.
+pub struct Catalogue {
+    pub products: HashMap<i64, Row>,
+    pub variants: HashMap<i64, Row>,
+    pub modifiers: HashMap<i64, Row>,
+    pub taxes: HashMap<i64, Row>,
+}
+
+pub async fn catalogue(state: &AppState, lines: &[Value]) -> AppResult<Catalogue> {
+    let mut product_ids = Vec::new();
+    let mut variant_ids = Vec::new();
+    let mut modifier_ids = Vec::new();
+    for l in lines {
+        if php::empty(l.get("food_item_id")) {
+            product_ids.extend(l.get("id").and_then(fk_id));
+        } else {
+            product_ids.extend(l.get("food_item_id").and_then(fk_id));
+            variant_ids.extend(l.get("id").and_then(fk_id));
+        }
+        if let Some(Value::Array(ms)) = l.get("modifiers") {
+            modifier_ids.extend(ms.iter().filter_map(|m| m.get("id").and_then(fk_id)));
+        }
+    }
+    Ok(Catalogue {
+        products: by_ids(&state.db, "food_items", product_ids).await?,
+        variants: by_ids(&state.db, "food_item_attributes", variant_ids).await?,
+        modifiers: by_ids(&state.db, "modifiers", modifier_ids).await?,
+        taxes: Sql::new("SELECT * FROM taxes").fetch_all(&state.db).await?.into_iter().map(|r| (r.i64("id"), r)).collect(),
+    })
+}
+
+/// A number sent as a JSON number or numeric text; None for anything else.
+pub fn number(v: Option<&Value>) -> Option<f64> {
+    let n = match v? {
+        Value::Number(n) => n.as_f64()?,
+        Value::String(s) => s.trim().parse::<f64>().ok()?,
+        _ => return None,
+    };
+    n.is_finite().then_some(n)
+}
+
+/// Largest quantity on one cart line.
+const MAX_LINE_QTY: f64 = 1_000_000.0;
+
+/// A till line re-priced from the catalogue: the unit price (unless the user
+/// may set their own), cost, modifier prices and the line totals come from
+/// the database. Name, notes and kitchen state are kept as sent. None when
+/// the line is not valid.
+pub fn reprice_line(s: &Settings, cat: &Catalogue, line: &Value, item_based: bool, own_price: bool) -> Option<Value> {
+    let mut o = line.as_object()?.clone();
+    let qty = number(o.get("qty")).filter(|q| *q > 0.0 && *q <= MAX_LINE_QTY)?;
+    let (product, variant) = if php::empty(o.get("food_item_id")) {
+        (cat.products.get(&fk_id(o.get("id")?)?)?, None)
+    } else {
+        let v = cat.variants.get(&fk_id(o.get("id")?)?)?;
+        let p = cat.products.get(&fk_id(o.get("food_item_id")?)?)?;
+        if v.i64("food_item_id") != p.i64("id") {
+            return None;
+        }
+        (p, Some(v))
+    };
+    let source = variant.unwrap_or(product);
+    let price = if own_price { number(o.get("price")).filter(|p| *p >= 0.0)? } else { source.f64("price") };
+    if !own_price {
+        o.insert("price".into(), source.val("price"));
+    }
+    o.insert("cost".into(), source.val("cost"));
+
+    let (mut mod_price, mut mod_cost) = (0.0, 0.0);
+    match o.get_mut("modifiers") {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(list)) => {
+            for m in list.iter_mut() {
+                let mo = m.as_object_mut()?;
+                let mqty = number(mo.get("qty")).filter(|q| *q >= 0.0 && *q <= MAX_LINE_QTY)?;
+                if !mo.get("is_checked").map(php::filter_bool).unwrap_or(false) {
+                    continue;
+                }
+                // Only the product's own (category) modifiers can be picked.
+                let row = cat.modifiers.get(&fk_id(mo.get("id")?)?)?;
+                if row.opt_i64("food_category_id") != product.opt_i64("food_category_id") {
+                    return None;
+                }
+                mod_price += mqty * row.f64("price");
+                mod_cost += mqty * row.f64("cost");
+                mo.insert("price".into(), row.val("price"));
+                mo.insert("cost".into(), row.val("cost"));
+            }
+        }
+        _ => return None,
+    }
+
+    let base = qty * price + mod_price;
+    o.insert("sub_total".into(), crate::util::json_num(base));
+    o.insert("modifiers_price".into(), crate::util::json_num(mod_price));
+    o.insert("modifiers_cost".into(), crate::util::json_num(mod_cost));
+    if item_based {
+        // The tax picked for the line, else the product's, else the default.
+        let chosen = o.get("tax_id").and_then(fk_id).and_then(|id| cat.taxes.get(&id));
+        let default = match product.opt_i64("tax_id").filter(|t| *t != 0) {
+            Some(id) => cat.taxes.get(&id),
+            None => s.row.opt_i64("tax_id").and_then(|id| cat.taxes.get(&id)),
+        };
+        let setup = chosen.or(default).map(|t| tax_resource(s, t)).unwrap_or_else(|| order_tax(s));
+        let rule = TaxRule::from_json(&setup);
+        let tax = rule.tax_for(base);
+        o.insert("tax_id".into(), setup.get("id").cloned().unwrap_or(Value::Null));
+        o.insert("tax_setup".into(), setup);
+        o.insert("tax_amount".into(), Value::from(format!("{tax:.2}")));
+        if rule.included {
+            o.insert("sub_total_before_tax".into(), crate::util::json_num(base - tax));
+        } else {
+            o.insert("sub_total_before_tax".into(), crate::util::json_num(base));
+            o.insert("sub_total".into(), crate::util::json_num(base + tax));
+        }
+    }
+    Some(Value::Object(o))
+}
+
+/// The order tax: a row of Settings > Taxes picked on the till (by id), else
+/// the default from Settings > Tax. Rates never come from the request.
+pub fn chosen_order_tax(s: &Settings, taxes: &HashMap<i64, Row>, sent: Option<&Value>) -> Value {
+    sent.and_then(|t| t.get("id")).and_then(fk_id).and_then(|id| taxes.get(&id)).map(|r| pos_tax(s, r)).unwrap_or_else(|| order_tax(s))
 }
 
 /// Id of the user's open cash register.

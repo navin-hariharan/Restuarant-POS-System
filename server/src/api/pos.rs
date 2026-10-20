@@ -8,6 +8,7 @@ pub mod php;
 use self::common::{
     bool_col, by_ids, d, ids_of, items_list, json_col, load_pos_customers, lock_sale, opt_pos_pickup, opt_pos_table, pos_modifier,
     pos_payment_method, pos_pickup, pos_table, pos_tax, sale_by_uuid, set_table_booked, tax_resource, tx_exec, tx_row, Row, SaleData,
+    TaxRule,
 };
 use crate::{
     activity,
@@ -454,8 +455,53 @@ async fn checkout(
     let s = state.settings.get().await;
     let modes = s.modes();
     let now = s.now();
-    let items = items_list(input.get("items"));
+    // Prices and totals are worked out here from the catalogue, never taken from the till.
+    let sent_items = items_list(input.get("items"));
+    let cat = common::catalogue(&state, &sent_items).await?;
+    let own_price = user.can("apply_discount");
+    let mut items = Vec::with_capacity(sent_items.len());
+    for l in &sent_items {
+        let line = common::reprice_line(&s, &cat, l, modes.item_based_tax, own_price);
+        items.push(line.ok_or_else(|| AppError::field("items", "The selected items are invalid."))?);
+    }
+    let percent = match input.get("is_discount_in_percentage") {
+        Some(v) if !v.is_null() => php::filter_bool(v),
+        _ => sale.bool("is_discount_in_percentage"),
+    };
+    let rate = common::number(input.get("discount_rate"));
+    let tip = match input.get("tip_amount") {
+        None | Some(Value::Null) => Some(0.0),
+        v => common::number(v),
+    };
+    if let Some(key) = adjustment_error(rate, percent, common::number(input.get("discount_amount")), tip) {
+        return Err(AppError::field(key, format!("The selected {} is invalid.", key.replace('_', " "))));
+    }
+    let tax = common::chosen_order_tax(&s, &cat.taxes, input.get("tax"));
+    let t = common::totals(&items, modes.item_based_tax, &TaxRule::from_json(&tax), rate.unwrap_or(0.0), percent);
+    if t.discount > t.price + 1e-9 {
+        return Err(AppError::field("discount_amount", "The selected discount amount is invalid."));
+    }
+    if t.discount > 0.0 && !user.can("apply_discount") {
+        return Err(AppError::forbidden("You do not have permission to apply a discount."));
+    }
+    let payable = common::money(t.total);
+    if !total_matches(common::number(input.get("payable_after_all")), payable) {
+        return Err(AppError::unprocessable("The order total does not match the items."));
+    }
+    let n = crate::util::json_num;
     data.set("items", Value::Array(items.clone()));
+    data.set("tax", tax);
+    data.set("tax_amount", n(common::money(t.tax)));
+    data.set("cart_total_items", n(t.items));
+    data.set("cart_total_price", n(common::money(t.net)));
+    data.set("cart_total_cost", n(common::money(t.cost)));
+    data.set("discount_rate", n(rate.unwrap_or(0.0)));
+    data.set("discount_amount", n(common::money(t.discount)));
+    data.set("is_discount_in_percentage", Value::Bool(percent));
+    data.set("is_item_based_taxation", Value::Bool(modes.item_based_tax));
+    data.set("profit_after_all", n(common::money(t.profit)));
+    data.set("payable_after_all", n(payable));
+    data.set("tip_amount", n(tip.unwrap_or(0.0)));
 
     let mut tx = state.db.begin().await?;
     // Locked so two tills cannot check out the same order at once.
@@ -545,6 +591,25 @@ async fn cancel_order(
     activity::log(&state, &user, &headers, &state.t("Order information cancelled successfully").await, Some(&sale.str("tracking"))).await;
     notify::order_event(&state, sale.i64("id"), OrderEvent::Cancelled);
     Ok(common::reply(json!({ "message": state.t("Cancelled successfully").await })))
+}
+
+/// The first discount or tip value of a checkout that is out of range.
+fn adjustment_error(rate: Option<f64>, percent: bool, amount: Option<f64>, tip: Option<f64>) -> Option<&'static str> {
+    if !rate.is_some_and(|r| r >= 0.0 && (!percent || r <= 100.0)) {
+        return Some("discount_rate");
+    }
+    if !amount.is_some_and(|a| a >= 0.0) {
+        return Some("discount_amount");
+    }
+    if !tip.is_some_and(|t| t >= 0.0) {
+        return Some("tip_amount");
+    }
+    None
+}
+
+/// The till's total agrees with the server's to the cent.
+fn total_matches(sent: Option<f64>, ours: f64) -> bool {
+    sent.is_some_and(|v| (v - ours).abs() <= 0.01 + 1e-9)
 }
 
 #[derive(Debug, PartialEq)]
@@ -767,6 +832,27 @@ async fn reservation_checkout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkout_adjustments() {
+        assert_eq!(adjustment_error(Some(10.0), true, Some(1.0), Some(0.0)), None);
+        assert_eq!(adjustment_error(Some(150.0), false, Some(150.0), Some(2.0)), None);
+        assert_eq!(adjustment_error(Some(101.0), true, Some(1.0), Some(0.0)), Some("discount_rate"));
+        assert_eq!(adjustment_error(Some(-1.0), false, Some(0.0), Some(0.0)), Some("discount_rate"));
+        assert_eq!(adjustment_error(None, false, Some(0.0), Some(0.0)), Some("discount_rate"));
+        assert_eq!(adjustment_error(Some(0.0), false, Some(-5.0), Some(0.0)), Some("discount_amount"));
+        assert_eq!(adjustment_error(Some(0.0), false, Some(0.0), Some(-1.0)), Some("tip_amount"));
+        assert_eq!(adjustment_error(Some(0.0), false, Some(0.0), None), Some("tip_amount"));
+    }
+
+    #[test]
+    fn totals_must_match() {
+        assert!(total_matches(Some(12.34), 12.34));
+        assert!(total_matches(Some(12.35), 12.34));
+        assert!(!total_matches(Some(12.36), 12.34));
+        assert!(!total_matches(Some(0.0), 12.34));
+        assert!(!total_matches(None, 12.34));
+    }
 
     #[test]
     fn cancel_transitions() {

@@ -51,6 +51,10 @@ pub async fn consumption(conn: &mut MySqlConnection, items: &[Value]) -> AppResu
     for item in items {
         let Some(o) = item.as_object() else { continue };
         let qty = php::to_float(o.get("qty"));
+        // A line without a positive quantity never puts stock back.
+        if !(qty.is_finite() && qty > 0.0) {
+            continue;
+        }
         if let Some(u) = o.get("uuid").and_then(Value::as_str) {
             let book = if php::empty(o.get("food_item_id")) { &products } else { &variants };
             collect(book.get(u), qty);
@@ -62,8 +66,12 @@ pub async fn consumption(conn: &mut MySqlConnection, items: &[Value]) -> AppResu
                     continue;
                 }
             }
+            let mqty = php::to_float(m.get("qty"));
+            if !(mqty.is_finite() && mqty > 0.0) {
+                continue;
+            }
             if let Some(id) = m.get("id").and_then(crate::api::pos::common::fk_id) {
-                collect(modifiers.get(&id), php::to_float(m.get("qty")));
+                collect(modifiers.get(&id), mqty);
             }
         }
     }

@@ -3,7 +3,7 @@ import { Check, Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CartItem, CartModifier, PosProduct, TaxSetup } from '@/lib/cart';
 import { Button, Checkbox, Input, Modal, SearchInput, Select, Tabs, Textarea } from '@/components/ui';
-import { useConfig, useT } from '@/providers/AppProviders';
+import { useAuth, useConfig, useT } from '@/providers/AppProviders';
 import type { Tax } from './types';
 
 /* ------------------------------------------------------------- stepper */
@@ -113,6 +113,7 @@ export function LineEditor({
 }) {
   const t = useT();
   const { money } = useConfig();
+  const { can } = useAuth();
   const [draft, setDraft] = useState<CartItem | null>(item);
   const [tab, setTab] = useState<LineEditorTab>(initialTab);
   const [search, setSearch] = useState('');
@@ -173,7 +174,16 @@ export function LineEditor({
       {tab === 'details' || !hasModifiers ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <Input label={t('Food item name')} value={draft.name} onChange={(e) => set({ name: e.target.value })} wrapperClassName="sm:col-span-2" />
-          <Input label={t('Price per unit')} type="number" inputMode="decimal" min={0} step="0.01" value={draft.price} onChange={(e) => set({ price: e.target.value })} />
+          <Input
+            label={t('Price per unit')}
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={draft.price}
+            disabled={!can('apply_discount')}
+            onChange={(e) => set({ price: e.target.value })}
+          />
           <div>
             <span className="label">{t('Quantity')}</span>
             <Stepper value={Number(draft.qty) || 1} min={1} onChange={(qty) => set({ qty })} label={t('Quantity')} />
