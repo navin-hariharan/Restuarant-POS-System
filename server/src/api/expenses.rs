@@ -1,7 +1,7 @@
 //! Expenses (Expenses screen), with batch delete.
 
-use super::records::{self, filled, Col, Row};
 use super::expense_types::type_json;
+use super::records::{self, filled, Col, Row};
 use crate::{
     activity,
     auth::AuthUser,
@@ -34,7 +34,8 @@ pub fn router() -> Router<AppState> {
 }
 
 const MANAGE: &str = "manage_expenses";
-const SORTABLE: [&str; 9] = ["id", "title", "amount", "description", "expense_type_id", "expense_date", "cash_book_id", "created_at", "updated_at"];
+const SORTABLE: [&str; 9] =
+    ["id", "title", "amount", "description", "expense_type_id", "expense_date", "cash_book_id", "created_at", "updated_at"];
 
 /// ExpenseResource (`types` holds the expense types by id)
 fn expense_json(s: &Settings, r: &Row, types: &HashMap<i64, Row>) -> Value {
@@ -126,10 +127,11 @@ async fn store(State(state): State<AppState>, user: AuthUser, headers: HeaderMap
     let s = state.settings.get().await;
     if s.modes().cashbooks {
         // The open cashbook of the signed-in user, when there is one
-        let open: Option<i64> = sqlx::query_scalar("SELECT CAST(id AS SIGNED) FROM cash_books WHERE user_id = ? AND closed = 0 ORDER BY id LIMIT 1")
-            .bind(user.id)
-            .fetch_optional(&state.db)
-            .await?;
+        let open: Option<i64> =
+            sqlx::query_scalar("SELECT CAST(id AS SIGNED) FROM cash_books WHERE user_id = ? AND closed = 0 ORDER BY id LIMIT 1")
+                .bind(user.id)
+                .fetch_optional(&state.db)
+                .await?;
         cols.push(Col::plain("cash_book_id", open.map(Value::from).unwrap_or(Value::Null)));
     }
     let id = records::insert(&state.db, "expenses", &cols, s.now()).await?;
@@ -145,7 +147,13 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(id): Path<Stri
     Ok(Json(expense_json(&s, &row, &types)))
 }
 
-async fn update(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>, input: Input) -> AppResult<Json<Value>> {
+async fn update(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    input: Input,
+) -> AppResult<Json<Value>> {
     user.require(&[MANAGE])?;
     let row = records::find(&state, "expenses", &id).await?;
     let cols = validate(&state, &input, Some(row.i64("id"))).await?;

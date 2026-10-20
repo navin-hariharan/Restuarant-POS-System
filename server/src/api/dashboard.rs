@@ -2,14 +2,7 @@
 //! monthly sales chart and the latest sold items.
 
 use super::reports::{duration, food_item_image, number};
-use crate::{
-    auth::AuthUser,
-    db::RowExt,
-    error::AppResult,
-    input::Input,
-    query::Sql,
-    state::AppState,
-};
+use crate::{auth::AuthUser, db::RowExt, error::AppResult, input::Input, query::Sql, state::AppState};
 use axum::{extract::State, routing::get, Json, Router};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;

@@ -6,7 +6,7 @@ pub mod common;
 pub mod php;
 
 use self::common::{
-    bool_col, by_ids, d, ids_of, json_col, items_list, load_pos_customers, lock_sale, opt_pos_pickup, opt_pos_table, pos_modifier,
+    bool_col, by_ids, d, ids_of, items_list, json_col, load_pos_customers, lock_sale, opt_pos_pickup, opt_pos_table, pos_modifier,
     pos_payment_method, pos_pickup, pos_table, pos_tax, sale_by_uuid, set_table_booked, tax_resource, tx_exec, tx_row, Row, SaleData,
 };
 use crate::{
@@ -145,8 +145,20 @@ async fn modifiers(State(state): State<AppState>, user: AuthUser) -> AppResult<J
 }
 
 /// Columns the product lists may be sorted by.
-const PRODUCT_SORT: [&str; 12] =
-    ["id", "uuid", "sku", "name", "price", "cost", "food_category_id", "created_at", "updated_at", "is_bar_type", "has_variants", "expiry_date"];
+const PRODUCT_SORT: [&str; 12] = [
+    "id",
+    "uuid",
+    "sku",
+    "name",
+    "price",
+    "cost",
+    "food_category_id",
+    "created_at",
+    "updated_at",
+    "is_bar_type",
+    "has_variants",
+    "expiry_date",
+];
 
 /// A page of PosFoodItemResource (POS and digital menu).
 pub async fn product_page(state: &AppState, input: &Input, public: bool) -> AppResult<Value> {
@@ -182,7 +194,8 @@ pub async fn product_page(state: &AppState, input: &Input, public: bool) -> AppR
 
 /// PosFoodItemResource for each product row.
 pub async fn product_resources(state: &AppState, s: &Settings, rows: &[Row], public: bool) -> AppResult<Vec<Value>> {
-    let taxes: HashMap<i64, Row> = Sql::new("SELECT * FROM taxes").fetch_all(&state.db).await?.into_iter().map(|r| (r.i64("id"), r)).collect();
+    let taxes: HashMap<i64, Row> =
+        Sql::new("SELECT * FROM taxes").fetch_all(&state.db).await?.into_iter().map(|r| (r.i64("id"), r)).collect();
     let default_tax = s.row.opt_i64("tax_id").and_then(|id| taxes.get(&id));
     let tax_setup = |p: &Row| -> Value {
         let t = match p.opt_i64("tax_id").filter(|t| *t != 0) {
@@ -416,11 +429,27 @@ async fn checkout(
     user.require(&["order_checkout"])?;
     let sale = sale_by_uuid(&state.db, &uuid).await?;
     let mut errors = Errors::default();
-    require_fields(&input, &mut errors, &["items", "discount_rate", "discount_amount", "tax_amount", "tax", "profit_after_all", "payable_after_all", "payment_method_id"]);
+    require_fields(
+        &input,
+        &mut errors,
+        &["items", "discount_rate", "discount_amount", "tax_amount", "tax", "profit_after_all", "payable_after_all", "payment_method_id"],
+    );
     errors.check()?;
     let mut data = validated(
         &input,
-        &["items", "discount_rate", "discount_amount", "tax_amount", "tax", "profit_after_all", "payable_after_all", "payment_note", "staff_note", "payment_method_id", "tip_amount"],
+        &[
+            "items",
+            "discount_rate",
+            "discount_amount",
+            "tax_amount",
+            "tax",
+            "profit_after_all",
+            "payable_after_all",
+            "payment_note",
+            "staff_note",
+            "payment_method_id",
+            "tip_amount",
+        ],
     );
     let s = state.settings.get().await;
     let modes = s.modes();
@@ -619,11 +648,16 @@ async fn check_in(State(state): State<AppState>, user: AuthUser, headers: Header
     let Some(r) = row else {
         return Err(AppError::unprocessable("No record found! It might have already been checked in"));
     };
-    tx_exec(&mut tx, "UPDATE guest_room_reservations SET checkin_at = ?, updated_at = ? WHERE id = ?", vec![now.into(), now.into(), r.i64("id").into()])
-        .await?;
+    tx_exec(
+        &mut tx,
+        "UPDATE guest_room_reservations SET checkin_at = ?, updated_at = ? WHERE id = ?",
+        vec![now.into(), now.into(), r.i64("id").into()],
+    )
+    .await?;
     tx.commit().await?;
     let list = common::checked_in_reservations(&state).await?;
-    activity::log(&state, &user, &headers, &state.t("Guest room reservation checked in successfully").await, Some(&r.str("tracking"))).await;
+    activity::log(&state, &user, &headers, &state.t("Guest room reservation checked in successfully").await, Some(&r.str("tracking")))
+        .await;
     Ok(common::reply(json!({ "message": state.t("Checked in successfully").await, "reservations": list })))
 }
 
@@ -673,7 +707,8 @@ async fn reservation_checkout(
     }
     let finishing = php::truthy(&input.val("checkout_process"));
     if finishing {
-        activity::log(&state, &user, &headers, &state.t("Guest room reservation checked out successfully").await, Some(&r.str("tracking"))).await;
+        activity::log(&state, &user, &headers, &state.t("Guest room reservation checked out successfully").await, Some(&r.str("tracking")))
+            .await;
         sets.push("checkout_at = ?");
         args.push(now.into());
     }
@@ -681,7 +716,8 @@ async fn reservation_checkout(
     args.push(now.into());
     args.push(r.i64("id").into());
     let mut tx = state.db.begin().await?;
-    let locked = tx_row(&mut tx, "SELECT checkout_at FROM guest_room_reservations WHERE id = ? FOR UPDATE", vec![r.i64("id").into()]).await?;
+    let locked =
+        tx_row(&mut tx, "SELECT checkout_at FROM guest_room_reservations WHERE id = ? FOR UPDATE", vec![r.i64("id").into()]).await?;
     if locked.map(|l| l.opt_str("checkout_at").is_some()).unwrap_or(true) {
         return Err(AppError::unprocessable("Customer has already checkedout successfully"));
     }

@@ -104,9 +104,8 @@ fn long_day(d: Weekday) -> &'static str {
 }
 
 fn long_month(m: u32) -> &'static str {
-    [
-        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
-    ][(m.clamp(1, 12) - 1) as usize]
+    ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        [(m.clamp(1, 12) - 1) as usize]
 }
 
 /// Parse "Y-m-d H:i:s" / "Y-m-d" / ISO strings coming from the database or input.

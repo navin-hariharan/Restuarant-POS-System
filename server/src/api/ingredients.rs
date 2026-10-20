@@ -30,17 +30,12 @@ pub fn router() -> Router<AppState> {
         .route("/admin/ingredients-rows-destroy", delete(destroy_batch))
         .route(
             "/admin/ingredients/{ingredient}",
-            delete(destroy)
-                .route_layer(from_fn(crate::middleware::demo_mode))
-                .get(show)
-                .put(update)
-                .patch(update),
+            delete(destroy).route_layer(from_fn(crate::middleware::demo_mode)).get(show).put(update).patch(update),
         )
 }
 
 const PERM: &[&str] = &["manage_ingredients"];
-const SORTABLE: &[&str] =
-    &["id", "name", "price", "cost", "unit", "quantity", "alert_quantity", "description", "created_at", "updated_at"];
+const SORTABLE: &[&str] = &["id", "name", "price", "cost", "unit", "quantity", "alert_quantity", "description", "created_at", "updated_at"];
 
 // ---------------------------------------------------------------------------
 // Shared catalog helpers
@@ -332,11 +327,7 @@ async fn resources(state: &AppState, rows: &[Map<String, Value>]) -> AppResult<V
 
 async fn find(state: &AppState, id: &str) -> AppResult<Map<String, Value>> {
     let Ok(id) = id.parse::<i64>() else { return Err(AppError::not_found()) };
-    Sql::new("SELECT * FROM ingredients WHERE id = ?")
-        .push_args("", [id])
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(AppError::not_found)
+    Sql::new("SELECT * FROM ingredients WHERE id = ?").push_args("", [id]).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)
 }
 
 async fn index(State(state): State<AppState>, user: AuthUser, input: Input) -> AppResult<Json<Value>> {
@@ -449,12 +440,7 @@ async fn update(
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
 }
 
-async fn destroy(
-    State(state): State<AppState>,
-    user: AuthUser,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> AppResult<Json<Value>> {
+async fn destroy(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>) -> AppResult<Json<Value>> {
     user.require(PERM)?;
     let row = find(&state, &id).await?;
     let id = row.i64("id");
@@ -541,10 +527,7 @@ mod tests {
     #[test]
     fn consumption_rows() {
         let v = json!([{"id": 3, "quantity_using": "1.5"}, {"id": "4"}]);
-        assert_eq!(
-            parse_consumption(&v),
-            Some(vec![Consumption { id: 3, quantity: 1.5 }, Consumption { id: 4, quantity: 0.0 }])
-        );
+        assert_eq!(parse_consumption(&v), Some(vec![Consumption { id: 3, quantity: 1.5 }, Consumption { id: 4, quantity: 0.0 }]));
         assert_eq!(parse_consumption(&json!([{"name": "x"}])), None);
         assert_eq!(parse_consumption(&json!("x")), None);
     }

@@ -329,7 +329,10 @@ async fn recover(State(state): State<AppState>, headers: HeaderMap, input: Input
     }
     e.check()?;
     let email = email.unwrap_or_default();
-    let user = Sql::new("SELECT id, name, email FROM users WHERE email = ? LIMIT 1").push_args("", [email.clone()]).fetch_optional(&state.db).await?;
+    let user = Sql::new("SELECT id, name, email FROM users WHERE email = ? LIMIT 1")
+        .push_args("", [email.clone()])
+        .fetch_optional(&state.db)
+        .await?;
     let Some(user) = user else {
         return Err(AppError::not_acceptable("The email entered is not registered"));
     };

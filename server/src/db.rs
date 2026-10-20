@@ -99,10 +99,7 @@ pub fn column_json(row: &MySqlRow, idx: usize) -> Value {
         "BIT" => row.try_get::<u64, _>(idx).map(Value::from).unwrap_or(Value::Null),
         _ => match row.try_get::<String, _>(idx) {
             Ok(s) => Value::from(s),
-            Err(_) => row
-                .try_get::<Vec<u8>, _>(idx)
-                .map(|b| Value::from(String::from_utf8_lossy(&b).into_owned()))
-                .unwrap_or(Value::Null),
+            Err(_) => row.try_get::<Vec<u8>, _>(idx).map(|b| Value::from(String::from_utf8_lossy(&b).into_owned())).unwrap_or(Value::Null),
         },
     }
 }

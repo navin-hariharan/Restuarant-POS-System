@@ -56,7 +56,14 @@ fn normalize(key: &str, v: Value) -> Value {
             }
         }
         Value::Array(a) => Value::Array(a.into_iter().map(|x| normalize("", x)).collect()),
-        Value::Object(o) => Value::Object(o.into_iter().map(|(k, x)| { let n = normalize(&k, x); (k, n) }).collect()),
+        Value::Object(o) => Value::Object(
+            o.into_iter()
+                .map(|(k, x)| {
+                    let n = normalize(&k, x);
+                    (k, n)
+                })
+                .collect(),
+        ),
         other => other,
     }
 }
@@ -199,7 +206,13 @@ impl FromRequest<AppState> for Input {
             }
         }
 
-        let data = data.into_iter().map(|(k, v)| { let n = normalize(&k, v); (k, n) }).collect();
+        let data = data
+            .into_iter()
+            .map(|(k, v)| {
+                let n = normalize(&k, v);
+                (k, n)
+            })
+            .collect();
         Ok(Input { data, files })
     }
 }
@@ -274,12 +287,8 @@ impl Input {
     /// sort[column] / sort[order] limited to `allowed` columns.
     pub fn sort(&self, allowed: &[&str], default_col: &str, default_order: &str) -> (String, &'static str) {
         let sort = self.get("sort").and_then(Value::as_object);
-        let col = sort
-            .and_then(|s| s.get("column"))
-            .and_then(Value::as_str)
-            .filter(|c| allowed.contains(c))
-            .unwrap_or(default_col)
-            .to_string();
+        let col =
+            sort.and_then(|s| s.get("column")).and_then(Value::as_str).filter(|c| allowed.contains(c)).unwrap_or(default_col).to_string();
         let order = sort
             .and_then(|s| s.get("order"))
             .and_then(Value::as_str)

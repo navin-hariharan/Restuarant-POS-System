@@ -17,10 +17,7 @@ use axum::{
 use serde_json::{json, Map, Value};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/lang", get(list))
-        .route("/lang/{lang}", get(translations))
-        .route("/lang/set-language", post(set_language))
+    Router::new().route("/lang", get(list)).route("/lang/{lang}", get(translations)).route("/lang/set-language", post(set_language))
 }
 
 pub fn language_json(r: &Map<String, Value>) -> Value {

@@ -124,7 +124,10 @@ async fn resources(state: &AppState, books: &[Row]) -> AppResult<Vec<Value>> {
                     .collect(),
             );
         }
-        return Ok(books.iter().map(|b| resource(&s, b, &users, totals.get(&b.i64("id")), built.remove(&b.i64("id")).unwrap_or_default())).collect());
+        return Ok(books
+            .iter()
+            .map(|b| resource(&s, b, &users, totals.get(&b.i64("id")), built.remove(&b.i64("id")).unwrap_or_default()))
+            .collect());
     }
     Ok(vec![])
 }
@@ -207,7 +210,14 @@ async fn store(State(state): State<AppState>, user: AuthUser, headers: HeaderMap
     .last_insert_id() as i64;
     tx.commit().await?;
     activity::log(&state, &user, &headers, &state.t("Cashbook register opened successfully").await, None).await;
-    let row = { let mut q = Sql::new("SELECT * FROM cash_books WHERE id = ?"); q.args.push(id.into()); q }.fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
+    let row = {
+        let mut q = Sql::new("SELECT * FROM cash_books WHERE id = ?");
+        q.args.push(id.into());
+        q
+    }
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(AppError::not_found)?;
     // The fresh model is returned as built: the amount as sent, `closed` unset.
     let mut cashbook = one(&state, row).await?;
     if let Some(o) = cashbook.as_object_mut() {

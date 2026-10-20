@@ -155,7 +155,19 @@ async fn store(State(state): State<AppState>, user: AuthUser, input: Input) -> A
     }
     tokio::fs::write(&dest, &bytes).await.map_err(anyhow::Error::from)?;
     let uuid = crate::util::uuid();
-    let row = insert(&state, &uuid, &file.file_name, file.size, image_mime(ext), &client_extension(&file.file_name), "public", &folder, &server_name, user.id).await;
+    let row = insert(
+        &state,
+        &uuid,
+        &file.file_name,
+        file.size,
+        image_mime(ext),
+        &client_extension(&file.file_name),
+        "public",
+        &folder,
+        &server_name,
+        user.id,
+    )
+    .await;
     match row {
         Ok(r) => Ok(Json(file_json(&state, &r))),
         Err(e) => {
@@ -182,7 +194,20 @@ async fn attachment(State(state): State<AppState>, user: AuthUser, mut input: In
     }
     let mime = mime_guess::from_path(&file.file_name).first_or_octet_stream().to_string();
     let uuid = crate::util::uuid();
-    match insert(&state, &uuid, &file.file_name, file.size, &mime, &client_extension(&file.file_name), "private", &folder, &server_name, user.id).await {
+    match insert(
+        &state,
+        &uuid,
+        &file.file_name,
+        file.size,
+        &mime,
+        &client_extension(&file.file_name),
+        "private",
+        &folder,
+        &server_name,
+        user.id,
+    )
+    .await
+    {
         Ok(r) => Ok(Json(file_json(&state, &r))),
         Err(e) => {
             let _ = tokio::fs::remove_file(&dest).await;
@@ -194,32 +219,32 @@ async fn attachment(State(state): State<AppState>, user: AuthUser, mut input: In
 
 async fn show(State(state): State<AppState>, Path(id): Path<String>) -> AppResult<Json<Value>> {
     let id: i64 = id.parse().map_err(|_| AppError::not_found())?;
-    let row = Sql::new("SELECT * FROM media WHERE id = ?").push_args("", [id]).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
+    let row = Sql::new("SELECT * FROM media WHERE id = ?")
+        .push_args("", [id])
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(AppError::not_found)?;
     Ok(Json(file_json(&state, &row)))
 }
 
 /// `attachment` Content-Disposition with an ASCII fallback and the UTF-8 name.
 fn disposition(name: &str) -> String {
-    let ascii: String = name
-        .chars()
-        .map(|c| if c.is_ascii_graphic() && c != '"' && c != '\\' && c != '%' || c == ' ' { c } else { '_' })
-        .collect();
+    let ascii: String =
+        name.chars().map(|c| if c.is_ascii_graphic() && c != '"' && c != '\\' && c != '%' || c == ' ' { c } else { '_' }).collect();
     let encoded: String = name
         .bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
-                (b as char).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
+        .map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") })
         .collect();
     let ascii = if ascii.trim().is_empty() { "download".to_string() } else { ascii };
     format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
 }
 
 async fn download(State(state): State<AppState>, Path(uuid): Path<String>) -> AppResult<Response> {
-    let row = Sql::new("SELECT * FROM media WHERE uuid = ? LIMIT 1").push_args("", [uuid]).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)?;
+    let row = Sql::new("SELECT * FROM media WHERE uuid = ? LIMIT 1")
+        .push_args("", [uuid])
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(AppError::not_found)?;
     let path = file_path(&state, &row).ok_or_else(AppError::not_found)?;
     let meta = tokio::fs::metadata(&path).await.map_err(|_| AppError::not_found())?;
     if !meta.is_file() {
@@ -228,7 +253,8 @@ async fn download(State(state): State<AppState>, Path(uuid): Path<String>) -> Ap
     let file = tokio::fs::File::open(&path).await.map_err(|_| AppError::not_found())?;
     let mut res = Response::new(Body::from_stream(ReaderStream::new(file)));
     let h = res.headers_mut();
-    let mime = row.opt_str("mime").filter(|m| m.parse::<mime_guess::mime::Mime>().is_ok()).unwrap_or_else(|| "application/octet-stream".into());
+    let mime =
+        row.opt_str("mime").filter(|m| m.parse::<mime_guess::mime::Mime>().is_ok()).unwrap_or_else(|| "application/octet-stream".into());
     h.insert(header::CONTENT_TYPE, HeaderValue::from_str(&mime).unwrap_or(HeaderValue::from_static("application/octet-stream")));
     h.insert(header::CONTENT_LENGTH, HeaderValue::from(meta.len()));
     h.insert(

@@ -430,7 +430,10 @@ mod tests {
 
     #[test]
     fn php_json_matches_json_encode() {
-        assert_eq!(php_json(&json!({"a": "x/y", "b": "é", "c": 10.0, "d": 0.5, "e": {}})), "{\"a\":\"x\\/y\",\"b\":\"\\u00e9\",\"c\":10,\"d\":0.5,\"e\":[]}");
+        assert_eq!(
+            php_json(&json!({"a": "x/y", "b": "é", "c": 10.0, "d": 0.5, "e": {}})),
+            "{\"a\":\"x\\/y\",\"b\":\"\\u00e9\",\"c\":10,\"d\":0.5,\"e\":[]}"
+        );
         assert_eq!(php_json(&json!({"0": "a", "1": "b"})), r#"["a","b"]"#);
         assert_eq!(php_json(&json!("😀")), "\"\\ud83d\\ude00\"");
     }
@@ -459,7 +462,8 @@ mod tests {
 
     #[test]
     fn dirty_check() {
-        let row: Row = json!({"id": 1, "title": "Cash", "rate": 5.0, "price": "10.00", "flag": 1, "note": null}).as_object().unwrap().clone();
+        let row: Row =
+            json!({"id": 1, "title": "Cash", "rate": 5.0, "price": "10.00", "flag": 1, "note": null}).as_object().unwrap().clone();
         assert!(!Col::plain("title", json!("Cash")).changes(&row));
         assert!(Col::plain("title", json!("Card")).changes(&row));
         assert!(!Col::plain("rate", json!(5)).changes(&row));

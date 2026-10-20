@@ -83,9 +83,9 @@ fn template(s: &Settings, event: OrderEvent) -> Value {
         Value::Object(o) => Some(Value::Object(o)),
         _ => None,
     };
-    saved.filter(Value::is_object).unwrap_or_else(|| {
-        json!({ "mail_content": "Check at {order_link}", "sms_content": "Check at {tracking_link}", "subject": " # {tracking_id}" })
-    })
+    saved.filter(Value::is_object).unwrap_or_else(
+        || json!({ "mail_content": "Check at {order_link}", "sms_content": "Check at {tracking_link}", "subject": " # {tracking_id}" }),
+    )
 }
 
 /// Replace `{name}` placeholders; unknown ones stay as they are.
@@ -317,15 +317,8 @@ async fn send_whatsapp(state: &AppState, s: &Settings, phone: &str, text: &str) 
         bail!("The message content is missing");
     }
     let from = format!("whatsapp:+{}", s.str("wa_twilio_from").trim().trim_start_matches('+'));
-    twilio_send(
-        state,
-        &s.str("wa_twilio_account_sid"),
-        &s.str("wa_twilio_auth_token"),
-        &from,
-        &format!("whatsapp:{}", phone.trim()),
-        text,
-    )
-    .await
+    twilio_send(state, &s.str("wa_twilio_account_sid"), &s.str("wa_twilio_auth_token"), &from, &format!("whatsapp:{}", phone.trim()), text)
+        .await
 }
 
 async fn send_twilio_sms(state: &AppState, s: &Settings, phone: &str, text: &str) -> anyhow::Result<()> {
@@ -352,7 +345,10 @@ async fn send_vonage(state: &AppState, s: &Settings, phone: &str, text: &str) ->
     let first = body.get("messages").and_then(|m| m.get(0));
     let status = first.and_then(|m| m.get("status")).and_then(Value::as_str).unwrap_or("?");
     if status != "0" {
-        bail!("Vonage refused the message (status {status}: {})", first.and_then(|m| m.get("error-text")).and_then(Value::as_str).unwrap_or(""));
+        bail!(
+            "Vonage refused the message (status {status}: {})",
+            first.and_then(|m| m.get("error-text")).and_then(Value::as_str).unwrap_or("")
+        );
     }
     Ok(())
 }

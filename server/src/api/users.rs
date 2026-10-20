@@ -32,10 +32,7 @@ pub fn router() -> Router<AppState> {
 const PERM: &[&str] = &["manage_users"];
 
 pub fn gravatar(email: &str) -> String {
-    format!(
-        "https://www.gravatar.com/avatar/{}?s=80&d=retro",
-        rules::md5_hex(email.trim().to_lowercase().as_bytes())
-    )
+    format!("https://www.gravatar.com/avatar/{}?s=80&d=retro", rules::md5_hex(email.trim().to_lowercase().as_bytes()))
 }
 
 fn user_json(state: &AppState, s: &crate::settings::Settings, u: &Map<String, Value>, role: Value) -> Value {
@@ -80,10 +77,8 @@ pub async fn user_list(state: &AppState, rows: &[Map<String, Value>]) -> AppResu
         .iter()
         .map(|u| {
             let rid = u.i64("role_id");
-            let role = roles
-                .get(&rid)
-                .map(|r| super::roles::role_json(&s, r, counts.get(&rid).copied().unwrap_or(0)))
-                .unwrap_or(Value::Null);
+            let role =
+                roles.get(&rid).map(|r| super::roles::role_json(&s, r, counts.get(&rid).copied().unwrap_or(0))).unwrap_or(Value::Null);
             user_json(state, &s, u, role)
         })
         .collect())
@@ -186,18 +181,17 @@ async fn store(State(state): State<AppState>, user: AuthUser, headers: HeaderMap
     let name = input.string("name");
     let hash = crate::auth::hash_password(&input.str("password").unwrap_or_default())?;
     let now = state.settings.get().await.now();
-    let res = sqlx::query(
-        "INSERT INTO users (name, email, password, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&name)
-    .bind(input.string("email"))
-    .bind(&hash)
-    .bind(input.string("role_id"))
-    .bind(rules::bool_value(&input.val("status")))
-    .bind(now)
-    .bind(now)
-    .execute(&state.db)
-    .await?;
+    let res =
+        sqlx::query("INSERT INTO users (name, email, password, role_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind(&name)
+            .bind(input.string("email"))
+            .bind(&hash)
+            .bind(input.string("role_id"))
+            .bind(rules::bool_value(&input.val("status")))
+            .bind(now)
+            .bind(now)
+            .execute(&state.db)
+            .await?;
     crate::activity::log(&state, &user, &headers, &state.t("New user added successfully").await, Some(&name)).await;
     let row = load(&state, res.last_insert_id() as i64).await?;
     Ok(Json(json!({

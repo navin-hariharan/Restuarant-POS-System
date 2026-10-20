@@ -131,7 +131,9 @@ async fn new_name(state: &AppState, prefix: &str, tag: Option<&str>, ext: &str) 
     let dir = state.cfg.backups_dir();
     let mut name = format!("{prefix}-{stamp}{ext}");
     let mut n = 2;
-    while tokio::fs::try_exists(dir.join(&name)).await.unwrap_or(false) || tokio::fs::try_exists(dir.join(format!("{name}.part"))).await.unwrap_or(false) {
+    while tokio::fs::try_exists(dir.join(&name)).await.unwrap_or(false)
+        || tokio::fs::try_exists(dir.join(format!("{name}.part"))).await.unwrap_or(false)
+    {
         name = format!("{prefix}-{stamp}-{n}{ext}");
         n += 1;
     }
@@ -188,13 +190,7 @@ async fn dump_to(cfg: &Config, name: &str) -> Result<(), String> {
     let mut last_err = String::new();
     for skip_ssl in [false, true] {
         let mut cmd = tokio::process::Command::new(&cfg.dump_bin);
-        cmd.args([
-            "--single-transaction",
-            "--quick",
-            "--no-tablespaces",
-            "--skip-lock-tables",
-            "--default-character-set=utf8mb4",
-        ]);
+        cmd.args(["--single-transaction", "--quick", "--no-tablespaces", "--skip-lock-tables", "--default-character-set=utf8mb4"]);
         if skip_ssl {
             cmd.arg("--skip-ssl");
         }
@@ -252,7 +248,8 @@ async fn prune(dir: &FsPath, prefix: &str, keep: Option<&str>) {
 fn collation_regex() -> regex::bytes::Regex {
     // MySQL 8 collations MariaDB does not know (utf8mb4_0900_ai_ci and the
     // language specific *_0900_* ones)
-    regex::bytes::Regex::new(r"(?i-u)\butf8mb4_[a-z0-9_]*0900[a-z0-9_]*").unwrap_or_else(|_| regex::bytes::Regex::new("$^").expect("static"))
+    regex::bytes::Regex::new(r"(?i-u)\butf8mb4_[a-z0-9_]*0900[a-z0-9_]*")
+        .unwrap_or_else(|_| regex::bytes::Regex::new("$^").expect("static"))
 }
 
 fn starts_with_ci(line: &[u8], prefix: &[u8]) -> bool {
@@ -479,7 +476,9 @@ async fn restore(State(state): State<AppState>, user: AuthUser, headers: HeaderM
         let safety = new_name(&state, "pre-restore", None, ".sql").await;
         dump_to(&state.cfg, &safety).await.map_err(RestoreError::Safety)?;
         let cfg = state.cfg.clone();
-        let imported = tokio::task::spawn_blocking(move || import_blocking(&cfg, &path)).await.unwrap_or_else(|e| Err(format!("restore stopped ({e})")));
+        let imported = tokio::task::spawn_blocking(move || import_blocking(&cfg, &path))
+            .await
+            .unwrap_or_else(|e| Err(format!("restore stopped ({e})")));
         let result = match imported {
             Ok(has_migrations) => {
                 // A dump without its own migration history must not inherit
@@ -493,9 +492,9 @@ async fn restore(State(state): State<AppState>, user: AuthUser, headers: HeaderM
                     .await
                     .map(|r| tracing::info!(adopted = r.adopted, migrated = ?r.migrated, "database restored"))
                     .map_err(|e| {
-                tracing::error!(error = %format!("{e:#}"), "restored database could not be prepared");
-                format!("The restored database could not be upgraded: {e}")
-            })
+                        tracing::error!(error = %format!("{e:#}"), "restored database could not be prepared");
+                        format!("The restored database could not be upgraded: {e}")
+                    })
             }
             Err(e) => Err(e),
         };
@@ -616,7 +615,12 @@ fn is_sql_dump(path: &FsPath, gz: bool) -> bool {
     sniff_dump(path, gz).map(|b| looks_like_sql(&b)).unwrap_or(false)
 }
 
-async fn upload(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, multipart: Result<Multipart, MultipartRejection>) -> AppResult<Json<Value>> {
+async fn upload(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    multipart: Result<Multipart, MultipartRejection>,
+) -> AppResult<Json<Value>> {
     user.require(&[PERMISSION])?;
     let mut mp = multipart.map_err(|_| AppError::field("file", "The file field is required."))?;
     let tmp_dir = state.cfg.tmp_dir();
@@ -677,7 +681,13 @@ async fn upload(State(state): State<AppState>, user: AuthUser, headers: HeaderMa
             if !ok {
                 return Err(AppError::field("file", "The file is not a SQL database dump."));
             }
-            let name = new_name(&state, "uploaded", Some(&crate::util::random_string(6).to_ascii_lowercase()), if gz { ".sql.gz" } else { ".sql" }).await;
+            let name = new_name(
+                &state,
+                "uploaded",
+                Some(&crate::util::random_string(6).to_ascii_lowercase()),
+                if gz { ".sql.gz" } else { ".sql" },
+            )
+            .await;
             let dest = state.cfg.backups_dir().join(&name);
             tokio::fs::create_dir_all(state.cfg.backups_dir()).await.map_err(anyhow::Error::from)?;
             move_file(&temp.keep(), &dest).await?;
@@ -715,7 +725,13 @@ async fn upload(State(state): State<AppState>, user: AuthUser, headers: HeaderMa
             // dumps into backups
             tokio::fs::create_dir_all(state.cfg.backups_dir()).await.map_err(anyhow::Error::from)?;
             for (staged, gz) in &plan.dumps {
-                let name = new_name(&state, "uploaded", Some(&crate::util::random_string(6).to_ascii_lowercase()), if *gz { ".sql.gz" } else { ".sql" }).await;
+                let name = new_name(
+                    &state,
+                    "uploaded",
+                    Some(&crate::util::random_string(6).to_ascii_lowercase()),
+                    if *gz { ".sql.gz" } else { ".sql" },
+                )
+                .await;
                 move_file(staged, &state.cfg.backups_dir().join(&name)).await?;
                 backups.push(name);
             }
@@ -850,7 +866,8 @@ enum Staged {
 /// each file goes. Blocking: run it on a blocking thread.
 pub fn read_archive(zip_path: &FsPath, stage: &FsPath, limits: &ZipLimits) -> Result<ZipPlan, ZipError> {
     let file = std::fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file)).map_err(|_| ZipError::Invalid(tr!("The file is not a valid zip archive.")))?;
+    let mut archive =
+        zip::ZipArchive::new(BufReader::new(file)).map_err(|_| ZipError::Invalid(tr!("The file is not a valid zip archive.")))?;
     if archive.len() > limits.max_entries {
         return Err(ZipError::Invalid(tr!("The archive has too many files.")));
     }
@@ -991,9 +1008,7 @@ pub fn read_archive(zip_path: &FsPath, stage: &FsPath, limits: &ZipLimits) -> Re
     let any_marker = images.iter().any(|(_, parts)| marker_rest(parts).is_some());
     let common_wrapper = {
         let firsts: std::collections::HashSet<&str> = images.iter().map(|(_, p)| p[0].as_str()).collect();
-        firsts.len() == 1
-            && images.iter().all(|(_, p)| p.len() >= 3)
-            && firsts.iter().all(|f| !KNOWN_FOLDERS.contains(f))
+        firsts.len() == 1 && images.iter().all(|(_, p)| p.len() >= 3) && firsts.iter().all(|f| !KNOWN_FOLDERS.contains(f))
     };
     for (path, parts) in images {
         let rest = if any_marker {
@@ -1097,7 +1112,10 @@ mod tests {
             marker_rest(&["site".into(), "storage".into(), "app".into(), "public".into(), "avatar".into(), "x.png".into()]).unwrap(),
             vec!["avatar", "x.png"]
         );
-        assert_eq!(marker_rest(&["public".into(), "storage".into(), "food-items".into(), "x.png".into()]).unwrap(), vec!["food-items", "x.png"]);
+        assert_eq!(
+            marker_rest(&["public".into(), "storage".into(), "food-items".into(), "x.png".into()]).unwrap(),
+            vec!["food-items", "x.png"]
+        );
         assert!(marker_rest(&["food-items".into(), "x.png".into()]).is_none());
     }
 
@@ -1155,7 +1173,11 @@ mod tests {
             v
         };
         // per-entry limit: the big image is skipped, the rest imported
-        let (plan, dir) = run(&build_zip(&[("food-items/big.png", png(3000)), ("food-items/ok.png", png(500)), ("x/lang/ar.json", b"{\"a\":\"b\"}".to_vec())]));
+        let (plan, dir) = run(&build_zip(&[
+            ("food-items/big.png", png(3000)),
+            ("food-items/ok.png", png(500)),
+            ("x/lang/ar.json", b"{\"a\":\"b\"}".to_vec()),
+        ]));
         let plan = plan.unwrap();
         assert_eq!(plan.images.len(), 1);
         assert_eq!(plan.images[0].1, "food-items/ok.png");

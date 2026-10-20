@@ -3,8 +3,8 @@
 //! Every create and update runs in one transaction.
 
 use super::ingredients::{
-    batch_rows, changes, check_cost, check_price, dnum, filled, is_numeric, log, parse_consumption, php_string,
-    pivot_groups, require, taken, unknown_ingredients, Consumption,
+    batch_rows, changes, check_cost, check_price, dnum, filled, is_numeric, log, parse_consumption, php_string, pivot_groups, require,
+    taken, unknown_ingredients, Consumption,
 };
 use crate::{
     auth::AuthUser,
@@ -33,11 +33,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/food-items-attributes/{attribute}", delete(destroy_attribute))
         .route(
             "/admin/food-items/{food_item}",
-            delete(destroy)
-                .route_layer(from_fn(crate::middleware::demo_mode))
-                .get(show)
-                .put(update)
-                .patch(update),
+            delete(destroy).route_layer(from_fn(crate::middleware::demo_mode)).get(show).put(update).patch(update),
         )
 }
 
@@ -484,13 +480,15 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(uuid): Path<St
 
 async fn attach(conn: &mut MySqlConnection, item: i64, attribute: Option<i64>, rows: &[Consumption]) -> AppResult<()> {
     for c in rows {
-        sqlx::query("INSERT INTO food_items_ingredients (food_item_id, ingredient_id, quantity, food_item_attribute_id) VALUES (?, ?, ?, ?)")
-            .bind(item)
-            .bind(c.id)
-            .bind(c.quantity)
-            .bind(attribute)
-            .execute(&mut *conn)
-            .await?;
+        sqlx::query(
+            "INSERT INTO food_items_ingredients (food_item_id, ingredient_id, quantity, food_item_attribute_id) VALUES (?, ?, ?, ?)",
+        )
+        .bind(item)
+        .bind(c.id)
+        .bind(c.quantity)
+        .bind(attribute)
+        .execute(&mut *conn)
+        .await?;
     }
     Ok(())
 }
@@ -585,11 +583,8 @@ async fn store(State(state): State<AppState>, user: AuthUser, headers: HeaderMap
         crate::uploads::delete(&state, image.as_deref()).await;
         return Err(e);
     }
-    let msg = if form.has_variants {
-        tr!("New food item with variants added successfully")
-    } else {
-        tr!("New food item added successfully")
-    };
+    let msg =
+        if form.has_variants { tr!("New food item with variants added successfully") } else { tr!("New food item added successfully") };
     log(&state, &user, &headers, msg, None).await;
     Ok(Json(json!({ "message": state.t("Data saved successfully").await, "item": uuid })))
 }
@@ -661,11 +656,7 @@ async fn update(
         crate::uploads::delete(&state, image.as_deref()).await;
         return Err(e);
     }
-    let msg = if form.has_variants {
-        tr!("Food item with variants updated successfully")
-    } else {
-        tr!("Food item updated successfully")
-    };
+    let msg = if form.has_variants { tr!("Food item with variants updated successfully") } else { tr!("Food item updated successfully") };
     log(&state, &user, &headers, msg, None).await;
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
 }

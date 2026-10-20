@@ -7,8 +7,8 @@
 //! checked. `room-reservations-filters` is always available.
 
 use super::customers::customer_json;
-use super::records::{self, filled, Col, Row};
 use super::expenses::exists;
+use super::records::{self, filled, Col, Row};
 use super::taxes::pos_tax_json;
 use crate::{
     activity,
@@ -197,10 +197,11 @@ fn reservation_json(s: &Settings, r: &Row, rel: &Related) -> Value {
 
 /// PosCustomerResource: the customer with their 10 latest orders.
 async fn pos_customer_json(state: &AppState, s: &Settings, c: &Row) -> AppResult<Value> {
-    let sales = sqlx::query("SELECT id, uuid, tracking, updated_at FROM sales WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 10")
-        .bind(c.i64("id"))
-        .fetch_all(&state.db)
-        .await?;
+    let sales =
+        sqlx::query("SELECT id, uuid, tracking, updated_at FROM sales WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 10")
+            .bind(c.i64("id"))
+            .fetch_all(&state.db)
+            .await?;
     let now = s.now();
     let history: Vec<Value> = crate::db::rows_json(&sales)
         .iter()
@@ -391,7 +392,14 @@ async fn titled_show(state: &AppState, user: &AuthUser, t: Titled, id: &str) -> 
     Ok(Json(titled_json(&s, &row)))
 }
 
-async fn titled_update(state: &AppState, user: &AuthUser, headers: &HeaderMap, t: Titled, id: &str, input: Input) -> AppResult<Json<Value>> {
+async fn titled_update(
+    state: &AppState,
+    user: &AuthUser,
+    headers: &HeaderMap,
+    t: Titled,
+    id: &str,
+    input: Input,
+) -> AppResult<Json<Value>> {
     user.require(&[t.permission])?;
     let row = records::find(state, t.table, id).await?;
     let cols = titled_validate(state, t, &input, Some(row.i64("id"))).await?;
@@ -419,7 +427,13 @@ async fn titled_destroy(state: &AppState, user: &AuthUser, headers: &HeaderMap, 
 async fn source_index(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
     titled_index(&state, &user, SOURCES).await
 }
-async fn source_store(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
+async fn source_store(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    input: Input,
+) -> AppResult<Json<Value>> {
     titled_store(&state, &user, &headers, SOURCES, input).await
 }
 async fn source_show(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Value>> {
@@ -435,14 +449,26 @@ async fn source_update(
 ) -> AppResult<Json<Value>> {
     titled_update(&state, &user, &headers, SOURCES, &id, input).await
 }
-async fn source_destroy(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>) -> AppResult<Json<Value>> {
+async fn source_destroy(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     titled_destroy(&state, &user, &headers, SOURCES, &id).await
 }
 
 async fn status_index(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
     titled_index(&state, &user, STATUSES).await
 }
-async fn status_store(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
+async fn status_store(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    input: Input,
+) -> AppResult<Json<Value>> {
     titled_store(&state, &user, &headers, STATUSES, input).await
 }
 async fn status_show(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Value>> {
@@ -458,7 +484,13 @@ async fn status_update(
 ) -> AppResult<Json<Value>> {
     titled_update(&state, &user, &headers, STATUSES, &id, input).await
 }
-async fn status_destroy(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>) -> AppResult<Json<Value>> {
+async fn status_destroy(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     titled_destroy(&state, &user, &headers, STATUSES, &id).await
 }
 
@@ -514,7 +546,13 @@ async fn room_validate(state: &AppState, input: &Input, ignore: Option<i64>) -> 
     Ok(cols)
 }
 
-async fn room_store(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
+async fn room_store(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    input: Input,
+) -> AppResult<Json<Value>> {
     user.require(&[ROOMS])?;
     let cols = room_validate(&state, &input, None).await?;
     let now = state.settings.get().await.now();
@@ -548,7 +586,13 @@ async fn room_update(
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
 }
 
-async fn room_destroy(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>) -> AppResult<Json<Value>> {
+async fn room_destroy(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> AppResult<Json<Value>> {
     user.require(&[ROOMS])?;
     let row = records::find(&state, "guest_rooms", &id).await?;
     let id = row.i64("id");
@@ -658,7 +702,9 @@ async fn reservation_validate(state: &AppState, input: &Input) -> AppResult<Vec<
         match key {
             "customer_id" if !exists(state, "customers", &v).await? => e.add(key, tr!("The selected customer id is invalid.")),
             "guest_room_id" if !exists(state, "guest_rooms", &v).await? => e.add(key, tr!("The selected guest room id is invalid.")),
-            "booking_source_id" if !exists(state, "booking_sources", &v).await? => e.add(key, tr!("The selected booking source id is invalid.")),
+            "booking_source_id" if !exists(state, "booking_sources", &v).await? => {
+                e.add(key, tr!("The selected booking source id is invalid."))
+            }
             "reservation_status_id" if !exists(state, "reservation_statuses", &v).await? => {
                 e.add(key, tr!("The selected reservation status id is invalid."))
             }
@@ -742,7 +788,12 @@ async fn reservation_store(_: RoomsEnabled, State(state): State<AppState>, user:
     Ok(Json(json!({ "message": state.t("Data saved successfully").await, "reservation": uuid })))
 }
 
-async fn reservation_show(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, Path(uuid): Path<String>) -> AppResult<Json<Value>> {
+async fn reservation_show(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(uuid): Path<String>,
+) -> AppResult<Json<Value>> {
     user.require(&[RESERVATIONS])?;
     let row = records::find_by(&state, "guest_room_reservations", "uuid", uuid).await?;
     let s = state.settings.get().await;
@@ -772,14 +823,21 @@ async fn reservation_update(
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
 }
 
-async fn reservation_destroy(_: RoomsEnabled, State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(uuid): Path<String>) -> AppResult<Json<Value>> {
+async fn reservation_destroy(
+    _: RoomsEnabled,
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(uuid): Path<String>,
+) -> AppResult<Json<Value>> {
     user.require(&["manage_reservations_remove"])?;
     let row = records::find_by(&state, "guest_room_reservations", "uuid", uuid).await?;
     let id = row.i64("id");
-    let sales: Vec<(i64, Option<String>)> = sqlx::query_as("SELECT CAST(id AS SIGNED), tracking FROM sales WHERE guest_room_reservation_id = ? ORDER BY id")
-        .bind(id)
-        .fetch_all(&state.db)
-        .await?;
+    let sales: Vec<(i64, Option<String>)> =
+        sqlx::query_as("SELECT CAST(id AS SIGNED), tracking FROM sales WHERE guest_room_reservation_id = ? ORDER BY id")
+            .bind(id)
+            .fetch_all(&state.db)
+            .await?;
     let mut tx = state.db.begin().await?;
     sqlx::query("DELETE FROM sales WHERE guest_room_reservation_id = ?").bind(id).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM guest_room_reservations WHERE id = ?").bind(id).execute(&mut *tx).await?;

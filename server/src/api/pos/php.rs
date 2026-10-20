@@ -241,10 +241,7 @@ pub fn trim(s: &str) -> &str {
 
 fn days_in_month(y: i32, m: u32) -> u32 {
     let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
-    NaiveDate::from_ymd_opt(ny, nm, 1)
-        .and_then(|d| d.pred_opt())
-        .map(|d| d.day())
-        .unwrap_or(30)
+    NaiveDate::from_ymd_opt(ny, nm, 1).and_then(|d| d.pred_opt()).map(|d| d.day()).unwrap_or(30)
 }
 
 /// y/m/d/h/i/s between two moments like PHP's DateTime::diff (a <= b).
@@ -302,8 +299,8 @@ pub fn add_months(dt: &NaiveDateTime, months: i32) -> NaiveDateTime {
 /// MD5 hex digest (Gravatar URLs).
 pub fn md5_hex(input: &[u8]) -> String {
     const S: [u32; 64] = [
-        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4,
-        11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23,
+        4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
     ];
     let k: Vec<u32> = (0..64).map(|i| ((i as f64 + 1.0).sin().abs() * 4294967296.0) as u32).collect();
     let mut msg = input.to_vec();
@@ -315,7 +312,8 @@ pub fn md5_hex(input: &[u8]) -> String {
     msg.extend_from_slice(&bit_len.to_le_bytes());
     let (mut a0, mut b0, mut c0, mut d0) = (0x67452301u32, 0xefcdab89u32, 0x98badcfeu32, 0x10325476u32);
     for chunk in msg.chunks(64) {
-        let w: Vec<u32> = (0..16).map(|i| u32::from_le_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]])).collect();
+        let w: Vec<u32> =
+            (0..16).map(|i| u32::from_le_bytes([chunk[i * 4], chunk[i * 4 + 1], chunk[i * 4 + 2], chunk[i * 4 + 3]])).collect();
         let (mut a, mut b, mut c, mut d) = (a0, b0, c0, d0);
         for i in 0..64 {
             let (f, g) = match i / 16 {
@@ -349,7 +347,23 @@ mod tests {
 
     #[test]
     fn encodes_like_php() {
-        let v = json!([40.0, 8.3, 1e25, "a/b", "é", {}, [], 1e16, 1.2345678901234568e17, 0.0001, 0.00001, 1.5e-7, 0.30000000000000004, "\u{1}", "😀"]);
+        let v = json!([
+            40.0,
+            8.3,
+            1e25,
+            "a/b",
+            "é",
+            {},
+            [],
+            1e16,
+            1.2345678901234568e17,
+            0.0001,
+            0.00001,
+            1.5e-7,
+            0.30000000000000004,
+            "\u{1}",
+            "😀"
+        ]);
         assert_eq!(
             json_encode(&v),
             r#"[40,8.3,1.0e+25,"a\/b","\u00e9",[],[],10000000000000000,1.2345678901234568e+17,0.0001,1.0e-5,1.5e-7,0.30000000000000004,"\u0001","\ud83d\ude00"]"#

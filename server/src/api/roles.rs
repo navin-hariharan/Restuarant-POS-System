@@ -25,10 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/roles/permissions", get(permissions))
         .route("/admin/user-roles", get(index).post(store))
         .route("/admin/user-roles/{id}", get(show))
-        .route(
-            "/admin/user-roles/{id}",
-            axum::routing::put(update).patch(update).delete(destroy).route_layer(demo()),
-        )
+        .route("/admin/user-roles/{id}", axum::routing::put(update).patch(update).delete(destroy).route_layer(demo()))
 }
 
 const PERM: &[&str] = &["manage_user_roles"];
@@ -96,11 +93,7 @@ pub async fn role_list(state: &AppState, rows: &[Map<String, Value>]) -> AppResu
 
 async fn find(state: &AppState, id: &str) -> AppResult<Map<String, Value>> {
     let id: i64 = id.parse().map_err(|_| AppError::not_found())?;
-    Sql::new("SELECT * FROM user_roles WHERE id = ?")
-        .push_args("", [id])
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(AppError::not_found)
+    Sql::new("SELECT * FROM user_roles WHERE id = ?").push_args("", [id]).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)
 }
 
 async fn index(State(state): State<AppState>, user: AuthUser, input: Input) -> AppResult<Json<Value>> {

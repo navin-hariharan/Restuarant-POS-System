@@ -3,7 +3,7 @@
 
 use super::pos::{
     common::{
-        self, bool_col, by_ids, d, ids_of, json_col, items_list, load_pos_customers, load_staff, lock_sale, opt_pos_table, sale_by_uuid,
+        self, bool_col, by_ids, d, ids_of, items_list, json_col, load_pos_customers, load_staff, lock_sale, opt_pos_table, sale_by_uuid,
         set_table_booked, tx_exec, Row, ORDER_TYPES,
     },
     missing, php, validated,
@@ -100,7 +100,8 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(uuid): Path<St
     user.require(&["manage_sales", "pos_portal"])?;
     let o = sale_by_uuid(&state.db, &uuid).await?;
     let s = state.settings.get().await;
-    let staff = load_staff(&state, [o.opt_i64("chef_id"), o.opt_i64("biller_id"), o.opt_i64("order_taker_id")].into_iter().flatten()).await?;
+    let staff =
+        load_staff(&state, [o.opt_i64("chef_id"), o.opt_i64("biller_id"), o.opt_i64("order_taker_id")].into_iter().flatten()).await?;
     let person = |k: &str| o.opt_i64(k).and_then(|id| staff.get(&id)).cloned().unwrap_or(Value::Null);
     let customer = load_pos_customers(&state, o.opt_i64("customer_id")).await?.into_values().next().unwrap_or(Value::Null);
     let table = by_ids(&state.db, "service_tables", o.opt_i64("table_id")).await?;
@@ -220,10 +221,8 @@ async fn validate_order(state: &AppState, input: &Input, base: &[&str]) -> AppRe
     let s = state.settings.get().await;
     let modes = s.modes();
     let order_type = input.opt_str("order_type");
-    let mut keys: Vec<&'static str> = base
-        .iter()
-        .filter_map(|k| STORE_RULES.iter().chain(UPDATE_RULES.iter()).find(|r| *r == k).copied())
-        .collect();
+    let mut keys: Vec<&'static str> =
+        base.iter().filter_map(|k| STORE_RULES.iter().chain(UPDATE_RULES.iter()).find(|r| *r == k).copied()).collect();
     let extra: Option<&'static str> = match order_type.as_deref() {
         Some("dining") => Some("table_id"),
         Some("pickup") => Some("pickup_point_id"),
@@ -460,4 +459,3 @@ async fn filters(State(state): State<AppState>, user: AuthUser) -> AppResult<Jso
         "methods": methods.iter().map(|m| common::payment_method(&s, m)).collect::<Vec<_>>(),
     })))
 }
-

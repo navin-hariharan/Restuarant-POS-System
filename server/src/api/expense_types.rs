@@ -86,7 +86,13 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(id): Path<Stri
     Ok(Json(type_json(&s, &row)))
 }
 
-async fn update(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>, input: Input) -> AppResult<Json<Value>> {
+async fn update(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    input: Input,
+) -> AppResult<Json<Value>> {
     user.require(&[MANAGE])?;
     let row = records::find(&state, "expense_types", &id).await?;
     let cols = validate(&state, &input, Some(row.i64("id"))).await?;

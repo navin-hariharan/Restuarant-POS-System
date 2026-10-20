@@ -311,9 +311,8 @@ async fn customers_by_id(state: &AppState, s: &Settings, mut ids: Vec<i64>) -> A
     if ids.is_empty() {
         return Ok(out);
     }
-    let mut q = Sql::new(
-        "SELECT id, uuid, name, email, address, phone, shipping_addresses, created_at, updated_at FROM customers WHERE 1=1",
-    );
+    let mut q =
+        Sql::new("SELECT id, uuid, name, email, address, phone, shipping_addresses, created_at, updated_at FROM customers WHERE 1=1");
     q.and_in("id", ids.clone());
     let customers = q.fetch_all(&state.db).await?;
 

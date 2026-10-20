@@ -88,8 +88,7 @@ fn normalize_time(t: Option<&str>, default: &str) -> String {
 /// "Y-m-d H:i:s" parsed leniently like PHP: out-of-range parts roll over
 /// (2026-02-30 is 2 March). None when the text does not have that shape.
 pub fn parse_lenient(s: &str) -> Option<NaiveDateTime> {
-    static RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^(\d{1,4})-(\d{1,2})-(\d{1,2}) (\d{1,2}):(\d{2}):(\d{2})$").expect("regex"));
+    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d{1,4})-(\d{1,2})-(\d{1,2}) (\d{1,2}):(\d{2}):(\d{2})$").expect("regex"));
     let c = RE.captures(s)?;
     let n = |i: usize| c.get(i).and_then(|m| m.as_str().parse::<i64>().ok()).unwrap_or(0);
     let (y, m) = shift_month(n(1) as i32, 1, n(2) as i32 - 1);
@@ -111,7 +110,8 @@ pub fn advance(input: &Input, now: NaiveDateTime, tz: Tz) -> Range {
     let end_time = normalize_time(input.str("ending_time").as_deref(), "23:59:59");
     let epoch = Utc.timestamp_opt(0, 0).single().map(|d| d.with_timezone(&tz).naive_local()).unwrap_or_default();
 
-    let start = if given(&start_date) { parse_lenient(&format!("{} {start_time}", start_date.as_deref().unwrap_or(""))) } else { Some(epoch) };
+    let start =
+        if given(&start_date) { parse_lenient(&format!("{} {start_time}", start_date.as_deref().unwrap_or(""))) } else { Some(epoch) };
     let end = if given(&end_date) { parse_lenient(&format!("{} {end_time}", end_date.as_deref().unwrap_or(""))) } else { Some(now) };
     // an unreadable date resets both ends
     let (start, end) = match (start, end) {
@@ -145,7 +145,10 @@ pub fn advance(input: &Input, now: NaiveDateTime, tz: Tz) -> Range {
             let q_start = (today.month() - 1) / 3 * 3 + 1;
             let (y, m) = shift_month(today.year(), q_start, -3);
             let (ey, em) = shift_month(y, m, 2);
-            Range::Between(start_of_day(first_of_month(y, m)), end_of_day(NaiveDate::from_ymd_opt(ey, em, days_in_month(ey, em)).unwrap_or(today)))
+            Range::Between(
+                start_of_day(first_of_month(y, m)),
+                end_of_day(NaiveDate::from_ymd_opt(ey, em, days_in_month(ey, em)).unwrap_or(today)),
+            )
         }
         "last_biannual" => {
             let (y, m) = shift_month(today.year(), 1, -6);

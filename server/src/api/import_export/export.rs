@@ -194,9 +194,7 @@ pub fn guard(s: &str) -> String {
 
 /// The same rows with formula-like text guarded.
 pub fn guarded(rows: Vec<Vec<Cell>>) -> Vec<Vec<Cell>> {
-    rows.into_iter()
-        .map(|r| r.into_iter().map(|c| if let Cell::Text(t) = c { Cell::Text(guard(&t)) } else { c }).collect())
-        .collect()
+    rows.into_iter().map(|r| r.into_iter().map(|c| if let Cell::Text(t) = c { Cell::Text(guard(&t)) } else { c }).collect()).collect()
 }
 
 /// Number as text: whole numbers without decimals.
@@ -256,9 +254,8 @@ fn escape_html(s: &str) -> String {
 }
 
 pub fn html(title: &str, rows: &[Vec<Cell>]) -> Vec<u8> {
-    let mut out = String::from(
-        "<!DOCTYPE html>\n<html>\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n",
-    );
+    let mut out =
+        String::from("<!DOCTYPE html>\n<html>\n  <head>\n    <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n");
     out.push_str(&format!("    <title>{}</title>\n", escape_html(title)));
     out.push_str(
         "    <style type=\"text/css\">\n      html { font-family:Calibri, Arial, Helvetica, sans-serif; font-size:11pt; background-color:white }\n      \

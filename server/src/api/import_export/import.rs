@@ -91,10 +91,9 @@ pub fn spec(key: &str) -> Option<Spec> {
         ),
         "bookingsources" => s("booking_sources", &[("title", &[Required, Unique("booking_sources", "title")])]),
         "reservationstatuses" => s("reservation_statuses", &[("title", &[Required, Unique("reservation_statuses", "title")])]),
-        "guestrooms" => s(
-            "guest_rooms",
-            &[("room_name", &[Required, Unique("guest_rooms", "room_name")]), ("per_hour_charges", &[Numeric])],
-        ),
+        "guestrooms" => {
+            s("guest_rooms", &[("room_name", &[Required, Unique("guest_rooms", "room_name")]), ("per_hour_charges", &[Numeric])])
+        }
         _ => None,
     }
 }
@@ -186,8 +185,7 @@ pub fn rows(text: &str) -> Vec<HashMap<String, Option<String>>> {
     .collect()
 }
 
-static NUMERIC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$").expect("regex"));
+static NUMERIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$").expect("regex"));
 
 pub fn numeric(v: &str) -> Option<f64> {
     let t = v.trim();
@@ -292,7 +290,12 @@ pub fn sku(name: &str) -> String {
 }
 
 /// Insert one validated row.
-pub async fn insert(tx: &mut Transaction<'_, MySql>, key: &str, row: &HashMap<String, Option<String>>, now: chrono::NaiveDateTime) -> AppResult<()> {
+pub async fn insert(
+    tx: &mut Transaction<'_, MySql>,
+    key: &str,
+    row: &HashMap<String, Option<String>>,
+    now: chrono::NaiveDateTime,
+) -> AppResult<()> {
     let get = |k: &str| row.get(k).cloned().flatten();
     let num = |k: &str| get(k).and_then(|v| numeric(&v));
     let q = match key {
@@ -313,21 +316,21 @@ pub async fn insert(tx: &mut Transaction<'_, MySql>, key: &str, row: &HashMap<St
             .bind(get("tax_id").unwrap_or_else(|| "1".into()))
             .bind(get("expiry_date"))
         }
-        "customers" => sqlx::query(
-            "INSERT INTO customers (uuid, name, email, phone, address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(crate::util::uuid())
-        .bind(get("name"))
-        .bind(get("email"))
-        .bind(get("phone"))
-        .bind(get("address")),
-        "modifiers" => sqlx::query(
-            "INSERT INTO modifiers (title, price, cost, food_category_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(get("title"))
-        .bind(num("price"))
-        .bind(num("cost"))
-        .bind(get("food_category_id")),
+        "customers" => {
+            sqlx::query("INSERT INTO customers (uuid, name, email, phone, address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                .bind(crate::util::uuid())
+                .bind(get("name"))
+                .bind(get("email"))
+                .bind(get("phone"))
+                .bind(get("address"))
+        }
+        "modifiers" => {
+            sqlx::query("INSERT INTO modifiers (title, price, cost, food_category_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(get("title"))
+                .bind(num("price"))
+                .bind(num("cost"))
+                .bind(get("food_category_id"))
+        }
         "ingredients" => sqlx::query(
             "INSERT INTO ingredients (name, price, cost, unit, quantity, alert_quantity, description, created_at, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",

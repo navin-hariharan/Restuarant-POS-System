@@ -16,7 +16,11 @@ use crate::{
     settings::Settings,
     state::AppState,
 };
-use axum::{extract::State, routing::{get, post}, Json, Router};
+use axum::{
+    extract::State,
+    routing::{get, post},
+    Json, Router,
+};
 use rust_decimal::{prelude::ToPrimitive, Decimal, RoundingStrategy};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -177,7 +181,11 @@ fn clip(v: Option<&Value>, max: usize) -> Option<String> {
 /// Simple e-mail shape check (the `email` rule accepts RFC addresses).
 fn valid_email(e: &str) -> bool {
     let Some((local, domain)) = e.rsplit_once('@') else { return false };
-    !local.is_empty() && !domain.is_empty() && !e.chars().any(|c| c.is_whitespace() || c.is_control()) && !domain.starts_with('.') && !domain.ends_with('.')
+    !local.is_empty()
+        && !domain.is_empty()
+        && !e.chars().any(|c| c.is_whitespace() || c.is_control())
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
 }
 
 /// Catalogue rows needed to price the requested lines.
@@ -455,7 +463,8 @@ async fn collect_order(State(state): State<AppState>, input: Input) -> AppResult
     data.set("uuid", Value::from(uuid.clone()));
     data.set("customer_id", Value::from(customer));
     if modes.cashbooks {
-        let register = tx_row(&mut tx, "SELECT id FROM cash_books WHERE closed = 0 ORDER BY created_at DESC, id DESC LIMIT 1", vec![]).await?;
+        let register =
+            tx_row(&mut tx, "SELECT id FROM cash_books WHERE closed = 0 ORDER BY created_at DESC, id DESC LIMIT 1", vec![]).await?;
         data.set("cash_book_id", register.map(|r| Value::from(r.i64("id"))).unwrap_or(Value::Null));
     }
     let cols = data.columns(&mut tx).await?;

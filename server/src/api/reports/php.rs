@@ -9,8 +9,7 @@ use std::sync::LazyLock;
 /// Integer value of a request parameter like PHP's `(int)` cast:
 /// "12abc" = 12, "1e3" = 1000, "abc" = 0.
 pub fn int_cast(v: Option<&Value>) -> i64 {
-    static NUM: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?").expect("regex"));
+    static NUM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?").expect("regex"));
     match v {
         Some(Value::Number(n)) => n.as_i64().unwrap_or_else(|| n.as_f64().map(clamp_f64).unwrap_or(0)),
         Some(Value::Bool(b)) => *b as i64,

@@ -92,9 +92,7 @@ async fn import_data(State(state): State<AppState>, user: AuthUser, headers: Hea
 
     let key = input.str("resource").unwrap_or_default();
     let spec = import::spec(&key).ok_or_else(|| AppError::unprocessable("please specify resource to import"))?;
-    let rows = tokio::task::spawn_blocking(move || import::rows(&String::from_utf8_lossy(&bytes)))
-        .await
-        .map_err(anyhow::Error::from)?;
+    let rows = tokio::task::spawn_blocking(move || import::rows(&String::from_utf8_lossy(&bytes))).await.map_err(anyhow::Error::from)?;
     if rows.len() > import::MAX_ROWS {
         return Err(AppError::field("file", format!("The file may not contain more than {} rows.", import::MAX_ROWS)));
     }

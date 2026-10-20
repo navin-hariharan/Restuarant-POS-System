@@ -73,7 +73,8 @@ pub async fn throttle(State(state): State<AppState>, req: Request, next: Next) -
             None => format!("ip:{}", crate::activity::client_ip(req.headers())),
         };
         if !state.limiter.allow(&key, state.cfg.throttle_per_minute) {
-            let mut res = (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "message": "Too many requests. Please wait a minute." }))).into_response();
+            let mut res =
+                (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "message": "Too many requests. Please wait a minute." }))).into_response();
             res.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("60"));
             return res;
         }

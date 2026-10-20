@@ -108,11 +108,7 @@ pub async fn resolve_token(state: &AppState, token: &str) -> AppResult<Option<Au
     let permissions = decode_permissions(&role.val("permissions"));
 
     // Touch last_used_at at most once a minute
-    let stale = t
-        .opt_str("last_used_at")
-        .and_then(|s| crate::datefmt::parse(&s))
-        .map(|d| (now - d).num_seconds() >= 60)
-        .unwrap_or(true);
+    let stale = t.opt_str("last_used_at").and_then(|s| crate::datefmt::parse(&s)).map(|d| (now - d).num_seconds() >= 60).unwrap_or(true);
     if stale {
         let db = state.db.clone();
         tokio::spawn(async move {

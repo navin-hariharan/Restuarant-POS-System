@@ -30,7 +30,6 @@ pub fn round(v: f64, dp: u32) -> f64 {
     r.round().copysign(v) / f
 }
 
-
 pub fn uuid() -> String {
     uuid::Uuid::new_v4().to_string()
 }

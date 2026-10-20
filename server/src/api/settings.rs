@@ -335,9 +335,8 @@ fn text_len(v: &Value) -> usize {
 pub fn is_email(s: &str) -> bool {
     let Some((local, domain)) = s.rsplit_once('@') else { return false };
     let atext = |c: char| c.is_alphanumeric() || "!#$%&'*+-/=?^_`{|}~.".contains(c);
-    let label_ok = |l: &str| {
-        !l.is_empty() && !l.starts_with('-') && !l.ends_with('-') && l.chars().all(|c| c.is_alphanumeric() || c == '-')
-    };
+    let label_ok =
+        |l: &str| !l.is_empty() && !l.starts_with('-') && !l.ends_with('-') && l.chars().all(|c| c.is_alphanumeric() || c == '-');
     !local.is_empty()
         && local.len() <= 64
         && local.chars().all(atext)
@@ -437,8 +436,7 @@ impl<'a> Check<'a> {
     async fn required_if(&mut self, field: &str, other: &str, other_value: &str) {
         if empty(self.value(field)) {
             let o = self.state.t(&label(other)).await;
-            self.add(field, tr!("The :attribute field is required when :other is :value."), &[("other", &o), ("value", other_value)])
-                .await;
+            self.add(field, tr!("The :attribute field is required when :other is :value."), &[("other", &o), ("value", other_value)]).await;
         }
     }
 
@@ -456,9 +454,8 @@ fn need(user: &AuthUser, permission: &str) -> AppResult<()> {
 async fn user_roles(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
     need(&user, "authentication_configuration")?;
     let roles = sqlx::query("SELECT * FROM user_roles ORDER BY id").fetch_all(&state.db).await?;
-    let counts = sqlx::query("SELECT role_id, COUNT(*) AS n FROM users WHERE role_id IS NOT NULL GROUP BY role_id")
-        .fetch_all(&state.db)
-        .await?;
+    let counts =
+        sqlx::query("SELECT role_id, COUNT(*) AS n FROM users WHERE role_id IS NOT NULL GROUP BY role_id").fetch_all(&state.db).await?;
     let counts: std::collections::HashMap<i64, i64> = counts.iter().map(row_json).map(|r| (r.i64("role_id"), r.i64("n"))).collect();
     let s = state.settings.get().await;
     let list: Vec<Value> = roles
@@ -1159,7 +1156,16 @@ async fn set_templates(State(state): State<AppState>, user: AuthUser, input: Inp
 
 async fn get_sms(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
     need(&user, "sms_configuration")?;
-    let keys = ["sms_status", "sms_channel", "vonage_key", "vonage_secret", "vonage_from", "twilio_account_sid", "twilio_auth_token", "twilio_from"];
+    let keys = [
+        "sms_status",
+        "sms_channel",
+        "vonage_key",
+        "vonage_secret",
+        "vonage_from",
+        "twilio_account_sid",
+        "twilio_auth_token",
+        "twilio_from",
+    ];
     Ok(Json(Value::Object(pick(&state, &keys).await?)))
 }
 
@@ -1348,7 +1354,10 @@ mod tests {
 
     #[test]
     fn mask_is_not_saved() {
-        let input = Input { data: serde_json::from_value(json!({ "mail_password": MASK, "mail_host": "h", "wa_twilio_auth_token": "new" })).unwrap(), files: vec![] };
+        let input = Input {
+            data: serde_json::from_value(json!({ "mail_password": MASK, "mail_host": "h", "wa_twilio_auth_token": "new" })).unwrap(),
+            files: vec![],
+        };
         let mut ch = Changes::default();
         ch.take(&input, "mail_password", Kind::Text);
         ch.take(&input, "mail_host", Kind::Text);

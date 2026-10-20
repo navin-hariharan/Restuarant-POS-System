@@ -1,6 +1,8 @@
 //! Data for printed receipts: a sale and a guest room stay.
 
-use super::pos::common::{self, bool_col, by_ids, customer_basic, d, json_col, load_pos_customers, load_staff, opt_pos_pickup, opt_pos_table, sale_by_uuid};
+use super::pos::common::{
+    self, bool_col, by_ids, customer_basic, d, json_col, load_pos_customers, load_staff, opt_pos_pickup, opt_pos_table, sale_by_uuid,
+};
 use crate::{
     auth::AuthUser,
     db::RowExt,
@@ -16,9 +18,7 @@ use axum::{
 use serde_json::{json, Map, Value};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/pos/sale/{sale}", get(sale))
-        .route("/pos/print-guest-room-reserations/{reservation}", get(reservation))
+    Router::new().route("/pos/sale/{sale}", get(sale)).route("/pos/print-guest-room-reserations/{reservation}", get(reservation))
 }
 
 /// Order type title shown on receipts.
@@ -127,10 +127,13 @@ async fn reservation(State(state): State<AppState>, user: AuthUser, Path(uuid): 
         put(k, v);
     }
     put("orders", Value::Array(orders));
-    put("payments", match json_col(&r, "payments") {
-        Value::Null => json!([]),
-        v => v,
-    });
+    put(
+        "payments",
+        match json_col(&r, "payments") {
+            Value::Null => json!([]),
+            v => v,
+        },
+    );
     put("payment_status", bool_col(&r, "payment_cleared"));
     put("checkout_at", r.val("checkout_at"));
     put("created_at", d(&s, &r, "updated_at"));

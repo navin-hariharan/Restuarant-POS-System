@@ -2,8 +2,8 @@
 //! ingredients they consume (`ingredients_modifiers`).
 
 use super::ingredients::{
-    batch_ids, changes, check_cost, check_price, dnum, log, parse_consumption, pivot_groups, require, taken,
-    unknown_ingredients, Consumption,
+    batch_ids, changes, check_cost, check_price, dnum, log, parse_consumption, pivot_groups, require, taken, unknown_ingredients,
+    Consumption,
 };
 use crate::{
     auth::AuthUser,
@@ -24,17 +24,10 @@ use serde_json::{json, Map, Value};
 use sqlx::MySqlConnection;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/admin/modifiers", get(index).post(store))
-        .route("/admin/modifiers-rows-destroy", delete(destroy_batch))
-        .route(
-            "/admin/modifiers/{modifier}",
-            delete(destroy)
-                .route_layer(from_fn(crate::middleware::demo_mode))
-                .get(show)
-                .put(update)
-                .patch(update),
-        )
+    Router::new().route("/admin/modifiers", get(index).post(store)).route("/admin/modifiers-rows-destroy", delete(destroy_batch)).route(
+        "/admin/modifiers/{modifier}",
+        delete(destroy).route_layer(from_fn(crate::middleware::demo_mode)).get(show).put(update).patch(update),
+    )
 }
 
 const PERM: &[&str] = &["manage_modifiers"];
@@ -42,11 +35,7 @@ const SORTABLE: &[&str] = &["id", "title", "price", "cost", "food_category_id", 
 
 async fn find(state: &AppState, id: &str) -> AppResult<Map<String, Value>> {
     let Ok(id) = id.parse::<i64>() else { return Err(AppError::not_found()) };
-    Sql::new("SELECT * FROM modifiers WHERE id = ?")
-        .push_args("", [id])
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(AppError::not_found)
+    Sql::new("SELECT * FROM modifiers WHERE id = ?").push_args("", [id]).fetch_optional(&state.db).await?.ok_or_else(AppError::not_found)
 }
 
 async fn index(State(state): State<AppState>, user: AuthUser, input: Input) -> AppResult<Json<Value>> {
@@ -219,10 +208,9 @@ async fn remove(state: &AppState, ids: &[i64]) -> AppResult<()> {
     let list = vec!["?"; ids.len()].join(",");
     let args: Vec<crate::query::Arg> = ids.iter().map(|i| (*i).into()).collect();
     let mut tx = state.db.begin().await?;
-    for sql in [
-        format!("DELETE FROM ingredients_modifiers WHERE modifier_id IN ({list})"),
-        format!("DELETE FROM modifiers WHERE id IN ({list})"),
-    ] {
+    for sql in
+        [format!("DELETE FROM ingredients_modifiers WHERE modifier_id IN ({list})"), format!("DELETE FROM modifiers WHERE id IN ({list})")]
+    {
         bind_all(sqlx::query(&sql), &args).execute(&mut *tx).await?;
     }
     tx.commit().await?;

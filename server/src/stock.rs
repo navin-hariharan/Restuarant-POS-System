@@ -79,7 +79,12 @@ fn modifier_list(v: Option<&Value>) -> Vec<&serde_json::Map<String, Value>> {
 }
 
 /// uuid -> [(ingredient id, quantity per unit)] for products or variants.
-async fn recipes(conn: &mut MySqlConnection, table: &'static str, pivot_col: &'static str, uuids: &[String]) -> AppResult<HashMap<String, Vec<(i64, f64)>>> {
+async fn recipes(
+    conn: &mut MySqlConnection,
+    table: &'static str,
+    pivot_col: &'static str,
+    uuids: &[String],
+) -> AppResult<HashMap<String, Vec<(i64, f64)>>> {
     let mut out: HashMap<String, Vec<(i64, f64)>> = HashMap::new();
     if uuids.is_empty() {
         return Ok(out);

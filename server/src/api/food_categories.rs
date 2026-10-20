@@ -28,11 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/food-category-rows-destroy", delete(destroy_batch))
         .route(
             "/admin/food-categories/{food_category}",
-            delete(destroy)
-                .route_layer(from_fn(crate::middleware::demo_mode))
-                .get(show)
-                .put(update)
-                .patch(update),
+            delete(destroy).route_layer(from_fn(crate::middleware::demo_mode)).get(show).put(update).patch(update),
         )
 }
 

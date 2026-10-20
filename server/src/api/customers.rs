@@ -21,14 +21,11 @@ use axum::{
 use serde_json::{json, Value};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/admin/customers", get(index).post(store))
-        .route("/admin/customers/{customer}", get(show))
-        .merge(
-            Router::new()
-                .route("/admin/customers/{customer}", delete(destroy).put(update).patch(update))
-                .route_layer(axum::middleware::from_fn(crate::middleware::demo_mode)),
-        )
+    Router::new().route("/admin/customers", get(index).post(store)).route("/admin/customers/{customer}", get(show)).merge(
+        Router::new()
+            .route("/admin/customers/{customer}", delete(destroy).put(update).patch(update))
+            .route_layer(axum::middleware::from_fn(crate::middleware::demo_mode)),
+    )
 }
 
 const SORTABLE: [&str; 8] = ["id", "uuid", "name", "email", "phone", "address", "created_at", "updated_at"];
@@ -143,7 +140,12 @@ async fn update(
     Ok(Json(json!({ "message": state.t("Data updated successfully").await })))
 }
 
-async fn destroy(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(customer): Path<String>) -> AppResult<Json<Value>> {
+async fn destroy(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(customer): Path<String>,
+) -> AppResult<Json<Value>> {
     user.require(&["manage_customers"])?;
     let row = records::find_by(&state, "customers", "uuid", customer).await?;
     let id = row.i64("id");

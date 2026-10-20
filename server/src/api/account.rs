@@ -12,9 +12,7 @@ use serde_json::{json, Value};
 
 pub fn router() -> Router<AppState> {
     let demo = || axum::middleware::from_fn(crate::middleware::demo_mode);
-    Router::new()
-        .route("/account/update", post(update).route_layer(demo()))
-        .route("/account/password", post(password).route_layer(demo()))
+    Router::new().route("/account/update", post(update).route_layer(demo())).route("/account/password", post(password).route_layer(demo()))
 }
 
 /// Largest avatar (1000 KB), as before.

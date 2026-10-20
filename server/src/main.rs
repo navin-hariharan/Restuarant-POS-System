@@ -45,12 +45,7 @@ use config::Config;
 use serde_json::json;
 use state::AppState;
 use std::{sync::Arc, time::Duration};
-use tower_http::{
-    catch_panic::CatchPanicLayer,
-    compression::CompressionLayer,
-    timeout::TimeoutLayer,
-    trace::TraceLayer,
-};
+use tower_http::{catch_panic::CatchPanicLayer, compression::CompressionLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
 
 const USAGE: &str = "Usage:
@@ -148,9 +143,7 @@ async fn serve() -> anyhow::Result<()> {
         tracing::warn!("web app not found in {} (set WEB_DIR)", cfg.web_dir.display());
     }
     tracing::info!("listening on http://{addr}");
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).with_graceful_shutdown(shutdown()).await?;
     state.db.close().await;
     Ok(())
 }
@@ -179,9 +172,7 @@ pub fn router(state: AppState) -> Router {
         .fallback(get(web::spa))
         .layer(from_fn(middleware::security_headers))
         .layer(CompressionLayer::new())
-        .layer(CatchPanicLayer::custom(|_| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "message": "Server Error" }))).into_response()
-        }))
+        .layer(CatchPanicLayer::custom(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "message": "Server Error" }))).into_response()))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -240,11 +231,8 @@ async fn set_password(args: &[String]) -> anyhow::Result<()> {
     let cfg = Config::from_env()?;
     let db = db::connect(&cfg.db, cfg.db_wait_secs).await?;
     let hash = auth::hash_password(&password).map_err(|e| anyhow::anyhow!("{e:?}"))?;
-    let done = sqlx::query("UPDATE users SET password = ?, updated_at = NOW() WHERE email = ?")
-        .bind(&hash)
-        .bind(email)
-        .execute(&db)
-        .await?;
+    let done =
+        sqlx::query("UPDATE users SET password = ?, updated_at = NOW() WHERE email = ?").bind(&hash).bind(email).execute(&db).await?;
     if done.rows_affected() == 0 {
         anyhow::bail!("no user with email {email}");
     }

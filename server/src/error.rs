@@ -80,13 +80,10 @@ impl AppError {
                     2 => format!("{first} (and 1 more error)"),
                     n => format!("{first} (and {} more errors)", n - 1),
                 };
-                (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({ "message": message, "errors": errors.to_json() })))
-                    .into_response()
+                (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({ "message": message, "errors": errors.to_json() }))).into_response()
             }
             AppError::Status(code, message) => (code, Json(json!({ "message": message }))).into_response(),
-            AppError::Db(sqlx::Error::RowNotFound) => {
-                (StatusCode::NOT_FOUND, Json(json!({ "message": "Not found." }))).into_response()
-            }
+            AppError::Db(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, Json(json!({ "message": "Not found." }))).into_response(),
             AppError::Db(e) => {
                 tracing::error!(error = %e, "database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "message": "Server Error" }))).into_response()

@@ -204,10 +204,7 @@ pub async fn load_pos_customers(state: &AppState, ids: impl IntoIterator<Item = 
     for h in q.fetch_all(&state.db).await? {
         history.entry(h.i64("customer_id")).or_default().push(h);
     }
-    Ok(customers
-        .iter()
-        .map(|(id, row)| (*id, pos_customer(&s, row, history.get(id).map(Vec::as_slice).unwrap_or(&[]), &now)))
-        .collect())
+    Ok(customers.iter().map(|(id, row)| (*id, pos_customer(&s, row, history.get(id).map(Vec::as_slice).unwrap_or(&[]), &now))).collect())
 }
 
 /// TaxResource
@@ -309,10 +306,8 @@ pub async fn staff_from_rows(state: &AppState, users: Vec<Row>) -> AppResult<Has
             None => "gravatar".into(),
         };
         let email = u.str("email");
-        let gravatar = format!(
-            "https://www.gravatar.com/avatar/{}?s=80&d=retro",
-            php::md5_hex(php::trim(&email).to_lowercase().as_bytes())
-        );
+        let gravatar =
+            format!("https://www.gravatar.com/avatar/{}?s=80&d=retro", php::md5_hex(php::trim(&email).to_lowercase().as_bytes()));
         out.insert(
             u.i64("id"),
             json!({
@@ -436,17 +431,17 @@ pub fn pos_reservation(s: &Settings, parts: &ReservationParts, r: &Row) -> Value
         "customer".into(),
         r.opt_i64("customer_id").and_then(|c| parts.customers.get(&c)).map(|c| customer_basic(s, c)).unwrap_or(Value::Null),
     );
-    m.insert(
-        "guest_room".into(),
-        r.opt_i64("guest_room_id").and_then(|g| parts.rooms.get(&g)).cloned().unwrap_or(Value::Null),
-    );
+    m.insert("guest_room".into(), r.opt_i64("guest_room_id").and_then(|g| parts.rooms.get(&g)).cloned().unwrap_or(Value::Null));
     m.insert("checkin_at".into(), r.val("checkin_at"));
     m.insert("checkout_at".into(), r.val("checkout_at"));
     m.insert("payment_cleared".into(), bool_col(r, "payment_cleared"));
-    m.insert("payments".into(), match json_col(r, "payments") {
-        Value::Null => json!([]),
-        v => v,
-    });
+    m.insert(
+        "payments".into(),
+        match json_col(r, "payments") {
+            Value::Null => json!([]),
+            v => v,
+        },
+    );
     m.insert("note".into(), r.val("note"));
     m.insert("staff_note".into(), r.val("staff_note"));
     m.insert("tax_amount".into(), r.val("tax_amount"));
@@ -492,7 +487,8 @@ pub async fn lock_sale(conn: &mut MySqlConnection, id: i64) -> AppResult<Row> {
 /// Mark a table free / taken.
 pub async fn set_table_booked(conn: &mut MySqlConnection, table_id: Option<i64>, booked: bool, now: NaiveDateTime) -> AppResult<()> {
     if let Some(id) = table_id {
-        tx_exec(conn, "UPDATE service_tables SET is_booked = ?, updated_at = ? WHERE id = ?", vec![booked.into(), now.into(), id.into()]).await?;
+        tx_exec(conn, "UPDATE service_tables SET is_booked = ?, updated_at = ? WHERE id = ?", vec![booked.into(), now.into(), id.into()])
+            .await?;
     }
     Ok(())
 }
@@ -728,7 +724,12 @@ pub async fn exists(conn: &mut MySqlConnection, table: &'static str, id: i64) ->
 }
 
 /// Insert a sale and give it its tracking number. Returns (id, tracking).
-pub async fn insert_sale(conn: &mut MySqlConnection, cols: Vec<(&'static str, Arg)>, uuid: &str, now: NaiveDateTime) -> AppResult<(i64, String)> {
+pub async fn insert_sale(
+    conn: &mut MySqlConnection,
+    cols: Vec<(&'static str, Arg)>,
+    uuid: &str,
+    now: NaiveDateTime,
+) -> AppResult<(i64, String)> {
     let mut names: Vec<&str> = vec!["tracking"];
     let mut args: Vec<Arg> = vec![Arg::Str(format!("pending-{uuid}"))];
     for (c, a) in cols {
@@ -749,7 +750,8 @@ pub async fn insert_sale(conn: &mut MySqlConnection, cols: Vec<(&'static str, Ar
     );
     let id = tx_exec(conn, &sql, args).await?.last_insert_id() as i64;
     let tracking = tracking_for(&now, id);
-    tx_exec(conn, "UPDATE sales SET tracking = ?, updated_at = ? WHERE id = ?", vec![tracking.clone().into(), now.into(), id.into()]).await?;
+    tx_exec(conn, "UPDATE sales SET tracking = ?, updated_at = ? WHERE id = ?", vec![tracking.clone().into(), now.into(), id.into()])
+        .await?;
     Ok((id, tracking))
 }
 
@@ -786,7 +788,13 @@ pub const MAX_LINES: usize = 500;
 
 /// Write the `sale_items` rows of a sale (one per cart line), checking that
 /// each product exists.
-pub async fn create_sale_items(state: &AppState, conn: &mut MySqlConnection, sale_id: i64, items: &[Value], now: NaiveDateTime) -> AppResult<()> {
+pub async fn create_sale_items(
+    state: &AppState,
+    conn: &mut MySqlConnection,
+    sale_id: i64,
+    items: &[Value],
+    now: NaiveDateTime,
+) -> AppResult<()> {
     if items.len() > MAX_LINES {
         return Err(AppError::field("items", format!("The items must not have more than {MAX_LINES} items.")));
     }
@@ -920,9 +928,13 @@ pub fn advance_duration(q: &mut Sql, data: &Map<String, Value>, s: &Settings) {
     let end_date = get("ending_date");
     let start_time = norm(get("starting_time"), "00:00:00");
     let end_time = norm(get("ending_time"), "23:59:59");
-    let parse = |d: &Option<String>, t: &str| d.as_ref().and_then(|d| NaiveDateTime::parse_from_str(&format!("{d} {t}"), "%Y-%m-%d %H:%M:%S").ok());
+    let parse =
+        |d: &Option<String>, t: &str| d.as_ref().and_then(|d| NaiveDateTime::parse_from_str(&format!("{d} {t}"), "%Y-%m-%d %H:%M:%S").ok());
     let epoch = NaiveDate::from_ymd_opt(1970, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0)).unwrap_or(now);
-    let (mut start, mut end) = (if start_date.is_some() { parse(&start_date, &start_time) } else { Some(epoch) }, if end_date.is_some() { parse(&end_date, &end_time) } else { Some(now) });
+    let (mut start, mut end) = (
+        if start_date.is_some() { parse(&start_date, &start_time) } else { Some(epoch) },
+        if end_date.is_some() { parse(&end_date, &end_time) } else { Some(now) },
+    );
     if start.is_none() || end.is_none() {
         start = Some(epoch);
         end = Some(now);

@@ -20,14 +20,11 @@ use axum::{
 use serde_json::{json, Value};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/admin/service-tables", get(index).post(store))
-        .route("/admin/service-tables/{service_table}", get(show))
-        .merge(
-            Router::new()
-                .route("/admin/service-tables/{service_table}", delete(destroy).put(update).patch(update))
-                .route_layer(axum::middleware::from_fn(crate::middleware::demo_mode)),
-        )
+    Router::new().route("/admin/service-tables", get(index).post(store)).route("/admin/service-tables/{service_table}", get(show)).merge(
+        Router::new()
+            .route("/admin/service-tables/{service_table}", delete(destroy).put(update).patch(update))
+            .route_layer(axum::middleware::from_fn(crate::middleware::demo_mode)),
+    )
 }
 
 const MANAGE: &str = "manage_service_tables";
@@ -80,7 +77,13 @@ async fn show(State(state): State<AppState>, user: AuthUser, Path(id): Path<Stri
     Ok(Json(table_json(&state, &s, &row)))
 }
 
-async fn update(State(state): State<AppState>, user: AuthUser, headers: HeaderMap, Path(id): Path<String>, input: Input) -> AppResult<Json<Value>> {
+async fn update(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    input: Input,
+) -> AppResult<Json<Value>> {
     user.require(&[MANAGE])?;
     let row = records::find(&state, "service_tables", &id).await?;
     let cols = validate(&state, &input, Some(row.i64("id"))).await?;

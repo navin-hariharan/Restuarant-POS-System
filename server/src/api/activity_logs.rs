@@ -13,9 +13,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/admin/activity-logs", get(all_logs))
-        .route("/admin/my-activity-logs", get(my_logs))
+    Router::new().route("/admin/activity-logs", get(all_logs)).route("/admin/my-activity-logs", get(my_logs))
 }
 
 /// Logs as JSON with the user's name (one query for all names).
@@ -60,10 +58,7 @@ async fn all_logs(State(state): State<AppState>, user: AuthUser, input: Input) -
     let mut q = Sql::new("SELECT * FROM user_activity_logs WHERE 1=1");
     if let Some(search) = input.opt_str("search") {
         let p = s.search_pattern(&search);
-        q.push_args(
-            " AND (activity LIKE ? OR ip LIKE ? OR device LIKE ? OR link LIKE ?)",
-            [p.clone(), p.clone(), p.clone(), p],
-        );
+        q.push_args(" AND (activity LIKE ? OR ip LIKE ? OR device LIKE ? OR link LIKE ?)", [p.clone(), p.clone(), p.clone(), p]);
     }
     if let Some(u) = input.opt_str("user").or_else(|| input.opt_str("user_id")) {
         q.and("user_id = ?", u);

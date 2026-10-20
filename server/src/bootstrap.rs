@@ -15,20 +15,23 @@ const LOCK: &str = "pos_app_schema";
 
 /// Data migrations added after the baseline, in order. Names follow the
 /// `migrations` table convention so every release records them the same way.
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "2026_10_18_000001_fix_manager_overall_report_permission",
-    // The seeded Manager role carried a key nothing checks; give it the two
-    // report permissions it was meant to have.
-    r#"UPDATE user_roles
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "2026_10_18_000001_fix_manager_overall_report_permission",
+        // The seeded Manager role carried a key nothing checks; give it the two
+        // report permissions it was meant to have.
+        r#"UPDATE user_roles
         SET permissions = JSON_ARRAY_APPEND(JSON_ARRAY_APPEND(JSON_REMOVE(permissions, JSON_UNQUOTE(JSON_SEARCH(permissions, 'one', 'overall_report'))), '$', 'overall_sale_report'), '$', 'overall_expense_report')
         WHERE JSON_VALID(permissions) AND JSON_SEARCH(permissions, 'one', 'overall_report') IS NOT NULL
           AND JSON_SEARCH(permissions, 'one', 'overall_sale_report') IS NULL"#,
-), (
-    "2026_10_18_000002_drop_leftover_overall_report_key",
-    r#"UPDATE user_roles
+    ),
+    (
+        "2026_10_18_000002_drop_leftover_overall_report_key",
+        r#"UPDATE user_roles
         SET permissions = JSON_REMOVE(permissions, JSON_UNQUOTE(JSON_SEARCH(permissions, 'one', 'overall_report')))
         WHERE JSON_VALID(permissions) AND JSON_SEARCH(permissions, 'one', 'overall_report') IS NOT NULL"#,
-)];
+    ),
+];
 
 /// Tables every POS database has
 const MARKERS: [&str; 5] = ["users", "settings", "sales", "food_items", "user_roles"];
@@ -147,7 +150,9 @@ async fn run_locked(db: &Db, cfg: &Config) -> anyhow::Result<Report> {
         if !has_history {
             for t in MARKERS {
                 if !has(t) {
-                    bail!("this database is not a POS database (table `{t}` is missing); point DB_DATABASE at a POS database or an empty one");
+                    bail!(
+                        "this database is not a POS database (table `{t}` is missing); point DB_DATABASE at a POS database or an empty one"
+                    );
                 }
             }
             if !has_column(db, "settings", "allow_expiry_date").await? || !has_column(db, "food_items", "expiry_date").await? {
@@ -244,16 +249,14 @@ async fn seed(db: &Db, cfg: &Config) -> anyhow::Result<Option<String>> {
                 p
             }
         };
-        sqlx::query(
-            "INSERT INTO users (name, email, password, role_id, status, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)",
-        )
-        .bind(&cfg.admin_name)
-        .bind(&cfg.admin_email)
-        .bind(hash_password(&password).map_err(|e| anyhow::anyhow!("{e}"))?)
-        .bind(now)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("INSERT INTO users (name, email, password, role_id, status, created_at, updated_at) VALUES (?, ?, ?, 1, 1, ?, ?)")
+            .bind(&cfg.admin_name)
+            .bind(&cfg.admin_email)
+            .bind(hash_password(&password).map_err(|e| anyhow::anyhow!("{e}"))?)
+            .bind(now)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
     }
 
     if sqlx::query_scalar::<_, i64>(&count("languages")).fetch_one(&mut *tx).await? == 0 {
