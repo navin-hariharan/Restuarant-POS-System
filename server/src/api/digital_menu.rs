@@ -273,28 +273,11 @@ async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input:
     if modes.digital_menu_pin && pin.is_some() && !state.limiter.allow(&format!("pin:{}", crate::activity::client_ip(&headers)), 20) {
         return Err(AppError::too_many(tr!("Too many attempts. Please wait a minute and try again.")));
     }
-
-    // Price every line from the catalogue.
-    let cat = catalogue(&state, &lines).await?;
-    let ready = modes.bypass_kitchen_bar;
-    let mut priced = Vec::with_capacity(lines.len());
-    for (i, l) in lines.iter().enumerate() {
-        match price_line(&state, &s, &cat, l, i, modes.item_based_tax, ready) {
-            Some(p) => priced.push(p),
-            None => return Err(AppError::field("items", "The selected items are invalid.")),
-        }
-    }
-    let tax = order_tax(&s);
-    let t = totals(&priced, modes.item_based_tax, &TaxRule::from_json(&tax), 0.0, false);
-
+    // Before anything is priced or stored: the table's PIN, with the table row
+    // locked until the order is in, then the verified e-mail.
     let now = s.now();
-    let uuid = crate::util::uuid();
-    let name = input.string("name");
-    let note = clip(input.get("note_for_chef"), 1000);
     let table = table_id.as_ref().and_then(fk_id);
-
     let mut tx = state.db.begin().await?;
-    // The table's PIN, checked with its row locked until the order is in.
     if let (true, Some(table)) = (modes.digital_menu_pin, table) {
         let check = seating::check_pin(&mut tx, &s, table, pin.as_deref()).await?;
         if check != PinCheck::Ok {
@@ -314,6 +297,24 @@ async fn collect_order(State(state): State<AppState>, headers: HeaderMap, input:
             return Err(AppError::field("email", tr!("Please verify your email address before placing the order.")));
         }
     }
+
+    // Price every line from the catalogue.
+    let cat = catalogue(&state, &lines).await?;
+    let ready = modes.bypass_kitchen_bar;
+    let mut priced = Vec::with_capacity(lines.len());
+    for (i, l) in lines.iter().enumerate() {
+        match price_line(&state, &s, &cat, l, i, modes.item_based_tax, ready) {
+            Some(p) => priced.push(p),
+            None => return Err(AppError::field("items", "The selected items are invalid.")),
+        }
+    }
+    let tax = order_tax(&s);
+    let t = totals(&priced, modes.item_based_tax, &TaxRule::from_json(&tax), 0.0, false);
+
+    let uuid = crate::util::uuid();
+    let name = input.string("name");
+    let note = clip(input.get("note_for_chef"), 1000);
+
     // Reuse a customer only on a real e-mail / phone match.
     let mut customer: Option<i64> = None;
     if email.is_some() || phone.is_some() {

@@ -89,6 +89,9 @@ export default function DigitalMenu() {
     [verifyEmail, customer.email, tokenVersion, tableId],
   );
   const codeSent = !!otp.sentTo && otp.sentTo === customer.email.trim().toLowerCase();
+  const emailLooksValid = /^\S+@\S+\.\S+$/.test(customer.email.trim());
+  const pinFilled = !pinRequired || /^\d{6}$/.test(pin.trim());
+  const needsVerification = verifyEmail && !emailToken;
   useEffect(() => {
     if (otp.cooldown <= 0) return;
     const id = setTimeout(() => setOtp((o) => ({ ...o, cooldown: o.cooldown - 1 })), 1000);
@@ -510,7 +513,8 @@ export default function DigitalMenu() {
                 </div>
               </dl>
               {closed && <p className="text-sm text-amber-700 dark:text-amber-400">{t('This table has not been opened yet. Please ask a member of staff.')}</p>}
-              <button className="btn-primary h-12 w-full text-base" onClick={placeOrder} disabled={placing || closed}>
+              {!closed && needsVerification && <p className="text-sm text-slate-500">{t('Verify your email address to place the order.')}</p>}
+              <button className="btn-primary h-12 w-full text-base" onClick={placeOrder} disabled={placing || closed || needsVerification}>
                 {placing && <Spinner />}
                 {t('Place order')} · {money(totals.totalAmount)}
               </button>
@@ -617,11 +621,11 @@ export default function DigitalMenu() {
                 ) : (
                   <div className="space-y-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button type="button" className="btn-secondary btn-sm" onClick={sendCode} disabled={otp.sending || otp.cooldown > 0 || closed}>
+                      <button type="button" className="btn-secondary btn-sm" onClick={sendCode} disabled={otp.sending || otp.cooldown > 0 || closed || !emailLooksValid || !pinFilled}>
                         {otp.sending ? <Spinner /> : <Mail className="h-4 w-4" />}
                         {otp.cooldown > 0 ? t('Send again in :seconds s', { seconds: String(otp.cooldown) }) : codeSent ? t('Send a new code') : t('Send code')}
                       </button>
-                      <span className="text-xs text-slate-500">{codeSent ? t('Check your inbox for a 6-digit code.') : t('We email you a code to confirm your address.')}</span>
+                      <span className="text-xs text-slate-500">{codeSent ? t('Check your inbox for a 6-digit code.') : !pinFilled ? t('Enter the table code first.') : t('We email you a code to confirm your address.')}</span>
                     </div>
                     {codeSent && (
                       <div className="flex items-start gap-2">

@@ -140,6 +140,16 @@ pub fn after_failure(failed: i64, now: NaiveDateTime) -> (i64, Option<NaiveDateT
     }
 }
 
+/// Counters to store after a check: (failures, lock end), or None to leave
+/// them. A wrong code counts; a right one clears the count and any old lock.
+pub fn counters_after(check: PinCheck, seat: &Seat, now: NaiveDateTime) -> Option<(i64, Option<NaiveDateTime>)> {
+    match check {
+        PinCheck::Wrong => Some(after_failure(seat.failed, now)),
+        PinCheck::Ok if seat.failed != 0 || seat.locked_until.is_some() => Some((0, None)),
+        _ => None,
+    }
+}
+
 /// Check a guest's code inside the order's transaction, locking the table
 /// row. Counts wrong codes; the caller commits before returning the error
 /// so the count is kept.
@@ -150,21 +160,13 @@ pub async fn check_pin(conn: &mut MySqlConnection, s: &Settings, table_id: i64, 
     };
     let seat = Seat::from_row(&row);
     let check = judge(&seat, given, now, s.seating_pin_max_hours());
-    match check {
-        PinCheck::Wrong => {
-            let (failed, locked) = after_failure(seat.failed, now);
-            tx_exec(
-                conn,
-                "UPDATE service_tables SET pin_failed_attempts = ?, pin_locked_until = ? WHERE id = ?",
-                vec![failed.into(), locked.into(), table_id.into()],
-            )
-            .await?;
-        }
-        PinCheck::Ok if seat.failed != 0 || seat.locked_until.is_some() => {
-            tx_exec(conn, "UPDATE service_tables SET pin_failed_attempts = 0, pin_locked_until = NULL WHERE id = ?", vec![table_id.into()])
-                .await?;
-        }
-        _ => {}
+    if let Some((failed, locked)) = counters_after(check, &seat, now) {
+        tx_exec(
+            conn,
+            "UPDATE service_tables SET pin_failed_attempts = ?, pin_locked_until = ? WHERE id = ?",
+            vec![failed.into(), locked.into(), table_id.into()],
+        )
+        .await?;
     }
     Ok(check)
 }
@@ -367,6 +369,9 @@ mod tests {
             "created_at": null, "updated_at": null,
         }))
         .unwrap();
+        // the POS resource and the listed one (till picker and digital menu)
+        let pos = crate::api::pos::common::pos_table(&row).to_string();
+        assert!(!pos.contains("seating_pin") && !pos.contains("482915"), "{pos}");
         let v = crate::api::pos::common::listed_table(&row, true);
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys.len(), 4, "{keys:?}");
@@ -392,5 +397,21 @@ mod tests {
         let (f, lock) = after_failure(failed, now);
         assert_eq!(f, 0);
         assert_eq!(lock, Some(at(13, 10)));
+    }
+
+    #[test]
+    fn success_resets_the_counters() {
+        let now = at(13, 0);
+        let tried = Seat { failed: 3, ..open_seat() };
+        assert_eq!(counters_after(PinCheck::Ok, &tried, now), Some((0, None)));
+        // an expired lock is cleared too
+        let was_locked = Seat { locked_until: Some(at(12, 50)), ..open_seat() };
+        assert_eq!(counters_after(PinCheck::Ok, &was_locked, now), Some((0, None)));
+        // nothing to write when nothing changed
+        assert_eq!(counters_after(PinCheck::Ok, &open_seat(), now), None);
+        assert_eq!(counters_after(PinCheck::Missing, &tried, now), None);
+        assert_eq!(counters_after(PinCheck::Locked, &tried, now), None);
+        assert_eq!(counters_after(PinCheck::Wrong, &tried, now), Some((4, None)));
+        assert_eq!(counters_after(PinCheck::Wrong, &Seat { failed: 4, ..open_seat() }, now), Some((0, Some(at(13, 10)))));
     }
 }

@@ -99,6 +99,7 @@ Waiters take orders on a tablet, the kitchen sees them on a big screen, guests o
 - A QR code for every table opens the menu on the guest's phone
 - Guests browse, search, pick add-ons and send the order to the kitchen
 - Orders arrive on the POS and the kitchen display straight away
+- Staff open a table and give the guests a 6-digit table code; guests can also be asked to verify their email address ([how it works](docs/digital-menu-ordering.md))
 
 </td>
   </tr>
@@ -232,6 +233,7 @@ flowchart LR
 - 🧱 A strict Content Security Policy plus `nosniff`, frame and referrer headers
 - 🙈 Stored mail passwords and SMS/WhatsApp tokens are never sent back to the browser
 - 💳 Digital-menu orders are priced on the server from the database, never from the guest's browser
+- 🔢 Digital-menu orders need the table's code, which locks after five wrong tries, and optionally an email address verified with a code; codes and tokens are stored only as hashes and never logged
 - 🧯 Upload checks: file types are verified by content, archives are size-capped, and paths are sanitised
 
 ---
@@ -309,6 +311,8 @@ Everything an administrator can change lives in the database and is edited in **
 | `LOG_LEVEL` | `info` | Log detail (`warn`, `debug`, ...) |
 | `MYSQLDUMP_PATH`, `MYSQL_CLIENT_PATH` | `mariadb-dump`, `mariadb` | Backup tools |
 
+Digital menu ordering has three settings in **Settings > Advance > Digital menu ordering**: **Require a table code** (on), **Require a verified email address** (on, paused until **Settings > Outgoing mail** has a sender and a method other than Log) and **Table code valid for (hours)** (8). See [Digital menu ordering](docs/digital-menu-ordering.md), including what changes when you upgrade.
+
 ### 🖥️ Command line
 
 ```text
@@ -375,6 +379,12 @@ Any device with a modern browser. Use a laptop or tablet for the counter, a larg
 <summary><b>Can I change the logo and the restaurant name?</b></summary>
 
 Yes. Set the name, address and phone in **Settings > General**, and the logo and sign-in background in **Settings > Appearance**. Receipts can print the logo too (**Settings > Invoice printing**).
+</details>
+
+<details>
+<summary><b>Guests can't order from the digital menu.</b></summary>
+
+With **Require a table code** on (the default), a member of staff has to open the table first: in the till's table picker or in **Setup > Service tables**, press **Open table** and give the guests the code. The table closes again when its last order is paid. With **Require a verified email address** on, guests also need a code by email, which only works once **Settings > Outgoing mail** has a sender address and a method other than Log. Both are in **Settings > Advance > Digital menu ordering**; see [Digital menu ordering](docs/digital-menu-ordering.md).
 </details>
 
 <details>
