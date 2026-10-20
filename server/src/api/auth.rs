@@ -318,23 +318,20 @@ async fn recover(State(state): State<AppState>, headers: HeaderMap, input: Input
     let email = input.opt_str("email");
     match &email {
         None => e.add("email", rules::required_msg("email")),
-        Some(m) => {
-            if !rules::is_email(m) {
-                e.add("email", rules::email_msg("email"));
-            }
-            if !e.has("email") && !rules::taken(&state.db, "users", "email", m, None).await? {
-                e.add("email", rules::invalid_msg("email"));
-            }
-        }
+        Some(m) if !rules::is_email(m) => e.add("email", rules::email_msg("email")),
+        _ => {}
     }
     e.check()?;
+    // The same answer whether or not the address has an (active) account, so
+    // the form can not be used to find out who has one.
+    let sent = json!({ "message": state.t("An email has been sent with the password reset link").await });
     let email = email.unwrap_or_default();
-    let user = Sql::new("SELECT id, name, email FROM users WHERE email = ? LIMIT 1")
+    let user = Sql::new("SELECT id, name, email, status FROM users WHERE email = ? LIMIT 1")
         .push_args("", [email.clone()])
         .fetch_optional(&state.db)
         .await?;
-    let Some(user) = user else {
-        return Err(AppError::not_acceptable("The email entered is not registered"));
+    let Some(user) = user.filter(|u| u.i64("status") == 1) else {
+        return Ok(Json(sent));
     };
 
     // Only a hash of the token is stored; the link carries the token itself.
@@ -370,7 +367,7 @@ async fn recover(State(state): State<AppState>, headers: HeaderMap, input: Input
         }
         None => tracing::warn!("password reset e-mail not sent: set APP_URL (or the app URL in Settings) so the link can be built"),
     }
-    Ok(Json(json!({ "message": state.t("An email has been sent with the password reset link").await })))
+    Ok(Json(sent))
 }
 
 async fn reset(State(state): State<AppState>, headers: HeaderMap, input: Input) -> AppResult<Json<Value>> {
