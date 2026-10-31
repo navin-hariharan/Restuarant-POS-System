@@ -1234,6 +1234,7 @@
   "The place title field is required.": "The place title field is required.",
   "The place title has already been taken.": "The place title has already been taken.",
   "The place title may not be greater than 255 characters.": "The place title may not be greater than 255 characters.",
+  "The price cannot be lower than :price": "The price cannot be lower than :price",
   "The price field is required.": "The price field is required.",
   "The price must be a number.": "The price must be a number.",
   "The quantity must be a number.": "The quantity must be a number.",

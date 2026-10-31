@@ -1002,6 +1002,18 @@ pub fn number(v: Option<&Value>) -> Option<f64> {
     n.is_finite().then_some(n)
 }
 
+/// The unit price a till line is charged at. Users who may give discounts set
+/// any price; everyone else can charge the catalogue price or more, which lets
+/// them price open items (a catalogue price of 0, such as a room balance)
+/// without being able to sell below the catalogue price.
+fn line_price(sent: Option<f64>, catalogue: f64, own_price: bool) -> Option<f64> {
+    match sent {
+        Some(p) if p >= 0.0 && (own_price || p >= catalogue) => Some(p),
+        _ if own_price => None,
+        _ => Some(catalogue),
+    }
+}
+
 /// Largest quantity on one cart line.
 const MAX_LINE_QTY: f64 = 1_000_000.0;
 
@@ -1023,10 +1035,8 @@ pub fn reprice_line(s: &Settings, cat: &Catalogue, line: &Value, item_based: boo
         (p, Some(v))
     };
     let source = variant.unwrap_or(product);
-    let price = if own_price { number(o.get("price")).filter(|p| *p >= 0.0)? } else { source.f64("price") };
-    if !own_price {
-        o.insert("price".into(), source.val("price"));
-    }
+    let price = line_price(number(o.get("price")), source.f64("price"), own_price)?;
+    o.insert("price".into(), crate::util::json_num(price));
     o.insert("cost".into(), source.val("cost"));
 
     let (mut mod_price, mut mod_cost) = (0.0, 0.0);
@@ -1280,4 +1290,24 @@ pub fn reply(v: Value) -> axum::Json<Value> {
         }
     }
     axum::Json(fix(v))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_price;
+
+    #[test]
+    fn open_items_can_be_priced_without_the_discount_permission() {
+        // A room balance: catalogue price 0, the till charges 450.
+        assert_eq!(line_price(Some(450.0), 0.0, false), Some(450.0));
+        assert_eq!(line_price(Some(120.0), 100.0, false), Some(120.0));
+        // Below the catalogue price falls back to it.
+        assert_eq!(line_price(Some(80.0), 100.0, false), Some(100.0));
+        assert_eq!(line_price(None, 100.0, false), Some(100.0));
+        assert_eq!(line_price(Some(-5.0), 0.0, false), Some(0.0));
+        // With the permission any price goes, but it must be a price.
+        assert_eq!(line_price(Some(80.0), 100.0, true), Some(80.0));
+        assert_eq!(line_price(Some(-1.0), 100.0, true), None);
+        assert_eq!(line_price(None, 100.0, true), None);
+    }
 }

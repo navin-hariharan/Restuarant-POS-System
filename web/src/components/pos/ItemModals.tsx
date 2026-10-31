@@ -139,7 +139,18 @@ export function LineEditor({
   const hasModifiers = (draft.modifiers?.length ?? 0) > 0;
   const checkedCount = draft.modifiers?.filter((m) => m.is_checked).length ?? 0;
 
+  // Without the discount permission the price can be raised (open items such
+  // as a room balance are 0 in the catalogue) but not lowered; the server
+  // re-prices with the same rule at checkout.
+  const ownPrice = can('apply_discount');
+  const minPrice = ownPrice ? 0 : Number(item?.data?.price ?? item?.price) || 0;
+  const priceTooLow = !ownPrice && (Number(draft.price) || 0) < minPrice;
+
   const save = () => {
+    if (priceTooLow) {
+      setTab('details');
+      return;
+    }
     const qty = Math.max(1, Math.floor(Number(draft.qty) || 1));
     onSave({ ...draft, qty, price: Number(draft.price) || 0 });
   };
@@ -178,10 +189,10 @@ export function LineEditor({
             label={t('Price per unit')}
             type="number"
             inputMode="decimal"
-            min={0}
+            min={minPrice}
             step="0.01"
             value={draft.price}
-            disabled={!can('apply_discount')}
+            error={priceTooLow ? t('The price cannot be lower than :price', { price: money(minPrice) }) : undefined}
             onChange={(e) => set({ price: e.target.value })}
           />
           <div>
